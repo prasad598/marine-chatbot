@@ -55,7 +55,7 @@ module.exports = function () {
 
       const embeddingConfig = {
         destinationName: genAIHubConfig.EMBEDDING_MODEL_DESTINATION_NAME,
-        modelDeploymentUrl: genAIHubConfig.EMBEDDING_MODEL_DEPLOYMENT_URL,
+        deploymentUrl: genAIHubConfig.EMBEDDING_MODEL_DEPLOYMENT_URL,
         resourceGroup: genAIHubConfig.EMBEDDING_MODEL_RESOURCE_GROUP,
         apiVersion: genAIHubConfig.EMBEDDING_MODEL_API_VERSION,
         modelName: genAIHubConfig.EMBEDDING_MODEL_NAME || 'text-embedding-3-small'
