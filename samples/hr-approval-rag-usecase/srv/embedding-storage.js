@@ -51,6 +51,23 @@ module.exports = function () {
       const db = await cds.connect.to('db');
       const { Files, DocumentChunk } = this.entities;
       const vectorplugin = await cds.connect.to("cap-llm-plugin");
+      const genAIHubConfig = cds.env.requires?.GENERATIVE_AI_HUB || {};
+
+      const embeddingConfig = {
+        destinationName: genAIHubConfig.EMBEDDING_MODEL_DESTINATION_NAME,
+        modelDeploymentUrl: genAIHubConfig.EMBEDDING_MODEL_DEPLOYMENT_URL,
+        resourceGroup: genAIHubConfig.EMBEDDING_MODEL_RESOURCE_GROUP,
+        apiVersion: genAIHubConfig.EMBEDDING_MODEL_API_VERSION,
+        modelName: genAIHubConfig.EMBEDDING_MODEL_NAME || 'text-embedding-3-small'
+      };
+
+      const missingConfigEntries = Object.entries(embeddingConfig)
+        .filter(([key, value]) => key !== 'modelName' && !value)
+        .map(([key]) => key);
+
+      if (missingConfigEntries.length) {
+        throw new Error(`Missing embedding configuration for: ${missingConfigEntries.join(', ')}`);
+      }
       let textChunkEntries = [];
 
       // Check if document exists
@@ -120,11 +137,17 @@ module.exports = function () {
       // For each text chunk generate the embeddings
       for (const chunk of textChunks) {
         // TODO: 17-09 PRASAD const embedding = await vectorplugin.getEmbedding(chunk.pageContent);
-        const embedding = await vectorplugin.getEmbeddingWithConfig(chunk.pageContent);
+        const embeddingResponse = await vectorplugin.getEmbeddingWithConfig(embeddingConfig, chunk.pageContent);
+        const embeddingVector = embeddingResponse?.data?.[0]?.embedding;
+
+        if (!embeddingVector) {
+          throw new Error('Embedding response does not contain vector data.');
+        }
+
         const entry = {
           "text_chunk": chunk.pageContent,
           "metadata_column": fileName,
-          "embedding": array2VectorBuffer(embedding)
+          "embedding": array2VectorBuffer(embeddingVector)
         };
         textChunkEntries.push(entry);
       }
