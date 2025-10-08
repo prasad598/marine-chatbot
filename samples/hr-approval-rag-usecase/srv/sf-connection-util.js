@@ -5,7 +5,18 @@ AUTHORIZATION_HEADER = cds.env.requires["SUCCESS_FACTORS_CREDENTIALS"]["AUTHORIZ
 
 // Returns the download link for the provided invoice number
 async function getDownloadlink(invoiceNumber){
-    const formattedURL = "/poutil/rest/File/download/OTC/DA8012303B000031/238013029.pdf";
+    const trimmedInvoice = (invoiceNumber || "").toString().trim();
+
+    let formattedURL = "";
+
+    if (trimmedInvoice.length >= 5) {
+        const fiscalYearPrefix = trimmedInvoice.substring(0, 2);
+        const fiscalYear = `20${fiscalYearPrefix}`;
+        const companyCode = trimmedInvoice.substring(2, 5);
+        const docNumber = `0${trimmedInvoice}`;
+
+        formattedURL = `/sap/opu/odata/sap/ZFI_OTC_FORM_INVOICE_PDF_SRV/get_pdfSet(IBlart='RI',ICompany='${companyCode}',IDocno='${docNumber}',IFiscalYear='${fiscalYear}',ISystemAlias='AERO288')/$value`;
+    }
     try {
         console.log("STE-GPT-INFO getDownloadlink formattedURL"+formattedURL+" invoiceNumber="+invoiceNumber);
         const response = await executeHttpRequest(
