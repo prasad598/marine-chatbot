@@ -10,7 +10,7 @@ const embeddingColumn  = 'EMBEDDING';
 const contentColumn = 'TEXT_CHUNK';
 
 const systemPrompt =
-`Your task is to classify the user question into either of the three categories: invoice-request-query, download-invoice or generic-query\n
+`Your task is to classify the user question into either of the four categories: invoice-request-query, download-invoice, customer-analytics or generic-query\n
 
 
  If the user wants to know the invoice related details with company code, invoice number, posting date ,Customer return the response as json
@@ -32,6 +32,14 @@ const systemPrompt =
  For all other queries, return the response as json as follows
  {
     "category" : "generic-query"
+ }
+
+
+ If the user is asking about customer analytics, historical customer performance, payment history, or requests insight such as best or worst customers, return the response as json
+ with the following format:
+ {
+    "category" : "customer-analytics",
+    "analyticsQuery": "<restated customer analytics question from the user>"
  }
 
 
@@ -179,6 +187,27 @@ response: {
 }
 
 
+
+EXAMPLE12:
+
+
+user input: Who has been our best customer in terms of revenue over the last quarter?
+response:  {
+    "category" : "customer-analytics",
+    "analyticsQuery" : "Who has been our best customer in terms of revenue over the last quarter?"
+ }
+
+
+EXAMPLE13:
+
+
+user input: Show me the payment history details for our top five customers.
+response:  {
+    "category" : "customer-analytics",
+    "analyticsQuery" : "Show me the payment history details for our top five customers."
+ }
+
+
 `
 const hrRequestPrompt = 
 `You are a chatbot. Answer the user question based on the following information
@@ -237,10 +266,22 @@ Rules:\n
 3. Keep the tone formal and concise.\n`;
 
 
+const customerAnalyticsPrompt =
+`You are a chatbot. Use the provided context, delimited by triple backticks, to answer customer analytics questions.\n
+Context includes:\n
+1. The original customer analytics question.\n
+2. Customer analytics data retrieved from the Datasphere service.\n
+Rules:\n
+1. Summarize the returned analytics data in a clear and concise manner.\n
+2. If the data is empty, inform the user that no customer analytics data is available and suggest refining the question.\n
+3. Keep the tone formal and professional.\n`;
+
+
 const taskCategory = {
     "invoice-request-query" : hrRequestPrompt,
     "generic-query" : genericRequestPrompt,
-    "download-invoice" : downloadRequestPrompt
+    "download-invoice" : downloadRequestPrompt,
+    "customer-analytics" : customerAnalyticsPrompt
 }
 
 function getFormattedDate (timeStamp)
@@ -297,7 +338,8 @@ module.exports = function () {
             const promptResponses = {
                 "invoice-request-query": hrRequestPrompt,
                 "generic-query": genericRequestPrompt,
-                "download-invoice": downloadRequestPrompt
+                "download-invoice": downloadRequestPrompt,
+                "customer-analytics": customerAnalyticsPrompt
             };
 
             if (category === "invoice-request-query")
@@ -355,8 +397,29 @@ module.exports = function () {
                     promptResponses["download-invoice"] = downloadRequestPrompt + ` \`\`${JSON.stringify(downloadContext)}\`\` \n`;
                 }
             }
-            
-            
+
+            if (category === "customer-analytics")
+            {
+                const analyticsQuery = determinationJson?.analyticsQuery || user_query;
+                try {
+                    const customerAnalyticsData = await sf_connection_util.getCustomerDataFromDatasphere();
+                    console.log("STE-GPT-INFO customer analytics response " + JSON.stringify(customerAnalyticsData));
+                    const analyticsContext = {
+                        analyticsQuery,
+                        serviceResponse: customerAnalyticsData
+                    };
+                    promptResponses["customer-analytics"] = customerAnalyticsPrompt + ` \`\`${JSON.stringify(analyticsContext)}\`\` \n`;
+                } catch (error) {
+                    console.error("STE-GPT-ERROR customer analytics service call", error);
+                    const analyticsContext = {
+                        analyticsQuery,
+                        serviceResponse: []
+                    };
+                    promptResponses["customer-analytics"] = customerAnalyticsPrompt + ` \`\`${JSON.stringify(analyticsContext)}\`\` \n`;
+                }
+            }
+
+
 
             //handle memory before the RAG LLM call
             const memoryContext = await handleMemoryBeforeRagCall (conversationId , messageId, message_time, user_id , user_query, Conversation, Message );

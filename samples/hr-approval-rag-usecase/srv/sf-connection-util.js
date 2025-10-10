@@ -3,6 +3,27 @@ const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 AUTHORIZATION_HEADER = cds.env.requires["SUCCESS_FACTORS_CREDENTIALS"]["AUTHORIZATION_HEADER"]
 
+async function getCustomerDataFromDatasphere(){
+    try {
+        const formattedURL = "api/v1/datasphere/consumption/relational/GROUP_IT_SAP/4GV_FF_S_FI_OTCKPI_01/_4GV_FF_S_FI_OTCKPI_01";
+        console.log("STE-GPT-INFO getCustomerDataFromDatasphere formattedURL " + formattedURL);
+        const response = await executeHttpRequest(
+            {
+                destinationName: 'datasphere_ap11_qas'
+            }, {
+                method: 'GET',
+                url: formattedURL
+            }
+        );
+        console.log("STE-GPT-INFO getCustomerDataFromDatasphere status- " + response?.status);
+        console.log("STE-GPT-INFO getCustomerDataFromDatasphere data " + JSON.stringify(response?.data));
+        return response?.data;
+    } catch (e) {
+        console.error("STE-GPT-ERROR getCustomerDataFromDatasphere" + e);
+        throw e;
+    }
+}
+
 // Returns the download link for the provided invoice number
 async function getDownloadlink(invoiceNumber){
     const trimmedInvoice = (invoiceNumber || "").toString().trim();
@@ -221,4 +242,4 @@ function timestampToString(timestamp) {
     return formattedString;
 }
 
-module.exports = { getDownloadlink, getUserInfoById, getUserManagerId, getDirectReportsById, getEmployeeTime, getPeersVacationTimeByUserId };
+module.exports = { getCustomerDataFromDatasphere, getDownloadlink, getUserInfoById, getUserManagerId, getDirectReportsById, getEmployeeTime, getPeersVacationTimeByUserId };
