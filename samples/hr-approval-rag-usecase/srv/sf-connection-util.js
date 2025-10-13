@@ -3,6 +3,40 @@ const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 AUTHORIZATION_HEADER = cds.env.requires["SUCCESS_FACTORS_CREDENTIALS"]["AUTHORIZATION_HEADER"]
 
+function normalizeDateToYyyymmdd(asOfDate) {
+    if (!asOfDate && asOfDate !== 0) {
+        return "";
+    }
+    const rawValue = `${asOfDate}`.trim();
+    if (!rawValue) {
+        return "";
+    }
+
+    if (/^\d{8}$/.test(rawValue)) {
+        return rawValue;
+    }
+
+    if (/^\d{4}[-/.]\d{2}[-/.]\d{2}$/.test(rawValue)) {
+        return rawValue.replace(/[-./]/g, "");
+    }
+
+    if (/^\d{2}[-/.]\d{2}[-/.]\d{4}$/.test(rawValue)) {
+        const parts = rawValue.split(/[-.\/]/);
+        const [day, month, year] = parts;
+        return `${year}${month}${day}`;
+    }
+
+    const parsedDate = new Date(rawValue);
+    if (!isNaN(parsedDate.getTime())) {
+        const year = parsedDate.getFullYear();
+        const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(parsedDate.getDate()).padStart(2, '0');
+        return `${year}${month}${day}`;
+    }
+
+    return "";
+}
+
 async function getCustomerDataFromDatasphere(){
     try {
         const formattedURL = "api/v1/datasphere/consumption/relational/GROUP_IT_SAP/4GV_FF_S_FI_OTCKPI_01/_4GV_FF_S_FI_OTCKPI_01";
@@ -57,6 +91,33 @@ async function getDownloadlink(invoiceNumber){
     return { downloadUrl: formattedURL };
 }
 
+async function getStatementOfAccountLink(companyCode, customerCode, asOfDate) {
+    const trimmedCompanyCode = (companyCode || "").toString().trim();
+    const trimmedCustomerCode = (customerCode || "").toString().trim();
+    const formattedDate = normalizeDateToYyyymmdd(asOfDate);
+
+    let formattedURL = "";
+
+    if (trimmedCompanyCode && trimmedCustomerCode && formattedDate) {
+        formattedURL = `/sap/opu/odata/sap/ZFI_AR_SOA_FORM_SRV/get_pdfSet(ICompany='${trimmedCompanyCode}',ICustomer='${trimmedCustomerCode}',IOpendate='${formattedDate}',ISystemAlias='AERO288')/$value`;
+        try {
+            console.log("STE-GPT-INFO getStatementOfAccountLink formattedURL" + formattedURL);
+            await executeHttpRequest(
+                {
+                    destinationName: 'sthubsystem-qa-new'
+                }, {
+                    method: 'GET',
+                    url: formattedURL,
+                    responseType: 'arraybuffer'
+                }
+            );
+        } catch (e) {
+            console.error("STE-GPT-ERROR getStatementOfAccountLink" + e);
+        }
+    }
+
+    return { downloadUrl: formattedURL, formattedDate };
+}
 
 
 // Returns the user object with same structure as we get from SF API
@@ -242,4 +303,4 @@ function timestampToString(timestamp) {
     return formattedString;
 }
 
-module.exports = { getCustomerDataFromDatasphere, getDownloadlink, getUserInfoById, getUserManagerId, getDirectReportsById, getEmployeeTime, getPeersVacationTimeByUserId };
+module.exports = { getCustomerDataFromDatasphere, getDownloadlink, getStatementOfAccountLink, getUserInfoById, getUserManagerId, getDirectReportsById, getEmployeeTime, getPeersVacationTimeByUserId };

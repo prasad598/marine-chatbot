@@ -24,8 +24,18 @@ const systemPrompt =
  If the user wants to download, print or get a link for an invoice provide the response as json
  with the following format:
  {
-    "category" : "download-invoice"
+    "category" : "download-invoice",
     "invoiceNumber" : "invoice number provided by the user in 10 digit format"
+ }
+
+
+ If the user wants to retrieve a Statement of Account (SOA) for a customer provide the response as json
+ with the following format:
+ {
+    "category" : "soa-request",
+    "companyCode" : "company code provided by the user",
+    "customerCode" : "customer code provided by the user",
+    "asOfDate" : "as-of date provided by the user in any recognizable date format"
  }
 
 
@@ -56,6 +66,11 @@ c. if the user does not input exact dates and only mentions week, fill the dates
 3. If the category of the user question is "download-invoice",
 a. ensure invoice number is returned as 10 digit value. add leading zeros if required.
 b. if user input does not have an invoice number respond with invoiceNumber as empty string.
+
+
+4. If the category of the user question is "soa-request",
+a. if the user does not provide the company code, customer code, or as-of date, set the respective value as an empty string in the response JSON.
+b. Capture the as-of date exactly as provided by the user.
 
 
 EXAMPLES:
@@ -208,8 +223,20 @@ response:  {
  }
 
 
+EXAMPLE14:
+
+
+user input: Please share the SOA for customer 100252 in company code 808 as of 2nd May 2017.
+response:  {
+    "category" : "soa-request",
+    "companyCode" : "808",
+    "customerCode" : "100252",
+    "asOfDate" : "2nd May 2017"
+ }
+
+
 `
-const hrRequestPrompt = 
+const hrRequestPrompt =
 `You are a chatbot. Answer the user question based on the following information
 
 1. Invoice search policy , delimited by triple backticks. \n 
@@ -266,6 +293,21 @@ Rules:\n
 3. Keep the tone formal and concise.\n`;
 
 
+const soaRequestPrompt =
+`You are a chatbot. Use the provided context, delimited by triple backticks, to support Statement of Account (SOA) requests.\n
+Context includes:\n
+1. companyCode\n
+2. customerCode\n
+3. asOfDate\n
+4. formattedDate\n
+5. downloadUrl\n
+Rules:\n
+1. If any of companyCode, customerCode, or formattedDate is empty, politely ask the user to provide the missing information.\n
+2. When all required details are present and downloadUrl is available, respond using exactly the following XML structure with no additional text or punctuation:\n
+<href>StatementOfAccount</href>\n\n<href-value>{downloadUrl}</href-value>\n
+3. Keep the tone formal and concise.\n`;
+
+
 const customerAnalyticsPrompt =
 `You are a chatbot. Use the provided context, delimited by triple backticks, to answer customer analytics questions.\n
 Context includes:\n
@@ -281,7 +323,8 @@ const taskCategory = {
     "invoice-request-query" : hrRequestPrompt,
     "generic-query" : genericRequestPrompt,
     "download-invoice" : downloadRequestPrompt,
-    "customer-analytics" : customerAnalyticsPrompt
+    "customer-analytics" : customerAnalyticsPrompt,
+    "soa-request" : soaRequestPrompt
 }
 
 function getFormattedDate (timeStamp)
@@ -339,7 +382,8 @@ module.exports = function () {
                 "invoice-request-query": hrRequestPrompt,
                 "generic-query": genericRequestPrompt,
                 "download-invoice": downloadRequestPrompt,
-                "customer-analytics": customerAnalyticsPrompt
+                "customer-analytics": customerAnalyticsPrompt,
+                "soa-request": soaRequestPrompt
             };
 
             if (category === "invoice-request-query")
@@ -396,6 +440,26 @@ module.exports = function () {
                     const downloadContext = { invoiceNumber: "", downloadUrl: "" };
                     promptResponses["download-invoice"] = downloadRequestPrompt + ` \`\`${JSON.stringify(downloadContext)}\`\` \n`;
                 }
+            }
+
+            if (category === "soa-request")
+            {
+                const companyCode = determinationJson?.companyCode ? `${determinationJson.companyCode}`.trim() : "";
+                const customerCode = determinationJson?.customerCode ? `${determinationJson.customerCode}`.trim() : "";
+                const asOfDate = determinationJson?.asOfDate ? `${determinationJson.asOfDate}`.trim() : "";
+                const soaLinkResponse = await sf_connection_util.getStatementOfAccountLink(
+                    companyCode,
+                    customerCode,
+                    asOfDate
+                );
+                const soaContext = {
+                    companyCode,
+                    customerCode,
+                    asOfDate,
+                    formattedDate: soaLinkResponse?.formattedDate || "",
+                    downloadUrl: soaLinkResponse?.downloadUrl || ""
+                };
+                promptResponses["soa-request"] = soaRequestPrompt + ` \`\`${JSON.stringify(soaContext)}\`\` \n`;
             }
 
             if (category === "customer-analytics")
