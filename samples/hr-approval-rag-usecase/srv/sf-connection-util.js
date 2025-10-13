@@ -12,26 +12,46 @@ function normalizeDateToYyyymmdd(asOfDate) {
         return "";
     }
 
-    if (/^\d{8}$/.test(rawValue)) {
-        return rawValue;
+    const sanitizedValue = rawValue
+        .replace(/\s*([-.\/])\s*/g, '$1')
+        .replace(/\s{2,}/g, ' ') // collapse multiple spaces between words
+        .trim();
+
+    if (/^\d{8}$/.test(sanitizedValue)) {
+        return sanitizedValue;
     }
 
-    if (/^\d{4}[-/.]\d{2}[-/.]\d{2}$/.test(rawValue)) {
-        return rawValue.replace(/[-./]/g, "");
+    if (/^\d{4}[-/.]\d{2}[-/.]\d{2}$/.test(sanitizedValue)) {
+        return sanitizedValue.replace(/[-./]/g, "");
     }
 
-    if (/^\d{2}[-/.]\d{2}[-/.]\d{4}$/.test(rawValue)) {
-        const parts = rawValue.split(/[-.\/]/);
+    if (/^\d{2}[-/.]\d{2}[-/.]\d{4}$/.test(sanitizedValue)) {
+        const parts = sanitizedValue.split(/[-.\/]/);
         const [day, month, year] = parts;
         return `${year}${month}${day}`;
     }
 
-    const parsedDate = new Date(rawValue);
+    if (/^\d{2}[-/.][A-Za-z]{3}[-/.]\d{4}$/.test(sanitizedValue)) {
+        const parsedDate = new Date(sanitizedValue);
+        if (!isNaN(parsedDate.getTime())) {
+            const year = parsedDate.getFullYear();
+            const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+            const day = String(parsedDate.getDate()).padStart(2, '0');
+            return `${year}${month}${day}`;
+        }
+        return "";
+    }
+
+    const parsedDate = new Date(sanitizedValue);
     if (!isNaN(parsedDate.getTime())) {
         const year = parsedDate.getFullYear();
         const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
         const day = String(parsedDate.getDate()).padStart(2, '0');
         return `${year}${month}${day}`;
+    }
+
+    if (/^\d{8}$/.test(rawValue)) {
+        return rawValue;
     }
 
     return "";
