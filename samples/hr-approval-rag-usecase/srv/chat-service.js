@@ -466,18 +466,35 @@ module.exports = function () {
             {
                 const analyticsQuery = determinationJson?.analyticsQuery || user_query;
                 try {
-                    const customerAnalyticsData = await sf_connection_util.getCustomerDataFromDatasphere();
-                    console.log("STE-GPT-INFO customer analytics response " + JSON.stringify(customerAnalyticsData));
+                    const customerAnalyticsResult = await sf_connection_util.getCustomerDataFromDatasphere(analyticsQuery);
+                    console.log("STE-GPT-INFO customer analytics response " + JSON.stringify(customerAnalyticsResult));
                     const analyticsContext = {
                         analyticsQuery,
-                        serviceResponse: customerAnalyticsData
+                        serviceResponse: customerAnalyticsResult?.data,
+                        serviceUrl: customerAnalyticsResult?.formattedURL,
+                        appliedParameters: customerAnalyticsResult?.appliedParameters,
+                        analysis: customerAnalyticsResult?.analysis
                     };
                     promptResponses["customer-analytics"] = customerAnalyticsPrompt + ` \`\`${JSON.stringify(analyticsContext)}\`\` \n`;
                 } catch (error) {
                     console.error("STE-GPT-ERROR customer analytics service call", error);
                     const analyticsContext = {
                         analyticsQuery,
-                        serviceResponse: []
+                        serviceResponse: [],
+                        serviceUrl: "",
+                        appliedParameters: {},
+                        analysis: {
+                            summary: "",
+                            scopeDescription: "",
+                            rankingDescription: "",
+                            rankingType: "",
+                            orderDirection: "",
+                            limit: 0,
+                            clientFilter: "",
+                            limitProvided: false,
+                            customerInsights: [],
+                            customerHighlights: []
+                        }
                     };
                     promptResponses["customer-analytics"] = customerAnalyticsPrompt + ` \`\`${JSON.stringify(analyticsContext)}\`\` \n`;
                 }

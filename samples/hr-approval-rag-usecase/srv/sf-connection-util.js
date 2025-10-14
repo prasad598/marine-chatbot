@@ -57,10 +57,96 @@ function normalizeDateToYyyymmdd(asOfDate) {
     return "";
 }
 
-async function getCustomerDataFromDatasphere(){
+const DATASPHERE_CUSTOMER_PATH = "api/v1/datasphere/consumption/relational/GROUP_IT_SAP/4GV_FF_S_FI_OTCKPI_01/_4GV_FF_S_FI_OTCKPI_01";
+
+function parseCustomerAnalyticsQuery(analyticsQuery) {
+    const queryText = (analyticsQuery || "").toString().trim();
+
+    const isBottomQuery = /(bottom|worst|bad|delayed)/i.test(queryText);
+    const rankingType = isBottomQuery ? "bottom" : "top";
+    const orderDirection = isBottomQuery ? "desc" : "asc";
+
+    let limit = 5;
+    const explicitTopMatch = queryText.match(/(?:top|bottom|best|worst|bad|delayed|on\s*-?time)\s*(\d{1,3})/i);
+    const numericMentionMatch = queryText.match(/(\d{1,3})\s*customers?/i);
+    const limitMatch = explicitTopMatch || numericMentionMatch;
+    const limitProvided = Boolean(limitMatch);
+    if (limitMatch) {
+        const parsedLimit = parseInt(limitMatch[1], 10);
+        if (!Number.isNaN(parsedLimit) && parsedLimit > 0) {
+            limit = parsedLimit;
+        }
+    }
+
+    const hasCrossLob = /(cross[-\s]*lob|across\s+all\s+(?:lines?\s+of\s+business|lobs?)|across\s+lobs?)/i.test(queryText);
+    let clientFilter = "Aerospace 288";
+    if (hasCrossLob) {
+        clientFilter = "";
+    } else if (/(\belect\b|electronics?\s*288)/i.test(queryText)) {
+        clientFilter = "Electronics 288";
+    } else if (/aero/i.test(queryText)) {
+        clientFilter = "Aerospace 288";
+    }
+
+    return {
+        orderDirection,
+        rankingType,
+        limit,
+        clientFilter,
+        hasCrossLob,
+        limitProvided
+    };
+}
+
+function buildDatasphereQuery({ orderDirection, limit, clientFilter }) {
+    const queryParts = [];
+    if (clientFilter) {
+        queryParts.push(`$filter=${encodeURIComponent(`Client eq '${clientFilter}'`)}`);
+    }
+    queryParts.push(`$orderby=${encodeURIComponent(`Average_Customer_Payment_Days ${orderDirection}`)}`);
+    queryParts.push("$count=true");
+    queryParts.push(`$top=${limit}`);
+    queryParts.push("$skip=0");
+
+    return `${DATASPHERE_CUSTOMER_PATH}?${queryParts.join("&")}`;
+}
+
+function extractCustomerInsights(data) {
+    const records = Array.isArray(data?.value)
+        ? data.value
+        : Array.isArray(data?.d?.results)
+            ? data.d.results
+            : Array.isArray(data)
+                ? data
+                : [];
+
+    return records.map((entry, index) => {
+        const customerName = entry?.CustomerName
+            || entry?.Customer
+            || entry?.Customer_Name
+            || entry?.CUSTOMER
+            || entry?.CustomerDescription
+            || "Unknown Customer";
+        const paymentDays = entry?.Average_Customer_Payment_Days
+            ?? entry?.AverageCustomerPaymentDays
+            ?? entry?.AvgPaymentDays
+            ?? entry?.AveragePaymentDays
+            ?? entry?.Averagecustomerpaymentdays
+            ?? null;
+
+        return {
+            position: index + 1,
+            customerName,
+            averageCustomerPaymentDays: paymentDays,
+            raw: entry
+        };
+    });
+}
+
+async function getCustomerDataFromDatasphere(analyticsQuery){
+    const queryDetails = parseCustomerAnalyticsQuery(analyticsQuery);
+    const formattedURL = buildDatasphereQuery(queryDetails);
     try {
-      //  https://stengg-sapdatasphere-ap-qas.ap11.hcs.cloud.sap/api/v1/datasphere/consumption/relational/GROUP_IT_SAP/4GV_FF_S_FI_OTCKPI_01/_4GV_FF_S_FI_OTCKPI_01?$count=true&$top=2&$skip=0
-        const formattedURL = "api/v1/datasphere/consumption/relational/GROUP_IT_SAP/4GV_FF_S_FI_OTCKPI_01/_4GV_FF_S_FI_OTCKPI_01?$count=true&$top=2&$skip=0";
         console.log("STE-GPT-INFO getCustomerDataFromDatasphere formattedURL " + formattedURL);
         const response = await executeHttpRequest(
             {
@@ -72,7 +158,37 @@ async function getCustomerDataFromDatasphere(){
         );
         console.log("STE-GPT-INFO getCustomerDataFromDatasphere status- " + response?.status);
         console.log("STE-GPT-INFO getCustomerDataFromDatasphere data " + JSON.stringify(response?.data));
-        return response?.data;
+
+        const customerInsights = extractCustomerInsights(response?.data);
+        const customerHighlights = customerInsights.map((item) => {
+            const paymentText = item.averageCustomerPaymentDays === null || item.averageCustomerPaymentDays === undefined
+                ? "N/A"
+                : `${item.averageCustomerPaymentDays} days`;
+            return `${item.position}. ${item.customerName} - ${paymentText}`;
+        });
+        const scopeDescription = queryDetails.clientFilter ? `within the ${queryDetails.clientFilter} client` : "across all lines of business";
+        const rankingDescription = `${queryDetails.rankingType} ${queryDetails.limit}`;
+        const customerWord = queryDetails.limit === 1 ? "customer" : "customers";
+        const limitNote = queryDetails.limitProvided ? "" : " (defaulted to 5 due to unspecified limit)";
+        const summary = `Analyzed the ${rankingDescription} ${customerWord}${limitNote} ${scopeDescription} based on Average Customer Payment Days.`;
+
+        return {
+            data: response?.data,
+            formattedURL,
+            appliedParameters: queryDetails,
+            analysis: {
+                summary,
+                scopeDescription,
+                rankingDescription,
+                rankingType: queryDetails.rankingType,
+                orderDirection: queryDetails.orderDirection,
+                limit: queryDetails.limit,
+                clientFilter: queryDetails.clientFilter,
+                limitProvided: queryDetails.limitProvided,
+                customerInsights,
+                customerHighlights
+            }
+        };
     } catch (e) {
         console.error("STE-GPT-ERROR getCustomerDataFromDatasphere" + e);
         throw e;
