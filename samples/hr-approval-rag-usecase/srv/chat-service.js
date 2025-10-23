@@ -412,6 +412,11 @@ module.exports = function () {
             const determinationJson = JSON.parse(determinationResponse.content);
             const category = determinationJson?.category ;
 
+            console.log("STE-GPT-INFO classification", {
+                query: user_query,
+                classification: determinationJson
+            });
+
             if (! taskCategory.hasOwnProperty(category)) {
                 throw new Error(`${category} is not in the supported`);
               }
