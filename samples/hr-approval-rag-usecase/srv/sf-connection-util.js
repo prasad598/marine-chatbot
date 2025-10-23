@@ -276,6 +276,7 @@ async function validateInvoiceAvailability(invoiceNumber) {
     const formattedURL = `/sap/opu/odata/sap/ZFI_OTC_FORM_INVOICE_PDF_SRV/get_pdfstatusSet(IBlart='RI',ICompany='${companyCode}',IDocno='${docNumber}',IFiscalYear='${fiscalYear}',ISystemAlias='AERO288')`;
 
     try {
+        console.log("STE-GPT-INFO validateInvoiceAvailability request", formattedURL);
         const response = await executeHttpRequest(
             {
                 destinationName: 'sthubsystem-qa-new'
@@ -285,6 +286,10 @@ async function validateInvoiceAvailability(invoiceNumber) {
                 responseType: 'text'
             }
         );
+        console.log("STE-GPT-INFO validateInvoiceAvailability status", response?.status);
+        if (response?.data !== undefined) {
+            console.log("STE-GPT-INFO validateInvoiceAvailability body", response.data);
+        }
         const parsed = parsePdfStatusResponse(response?.data);
         return {
             status: parsed.status,
@@ -293,7 +298,7 @@ async function validateInvoiceAvailability(invoiceNumber) {
             fiscalYear
         };
     } catch (error) {
-        console.error("STE-GPT-ERROR validateInvoiceAvailability" + error);
+        console.error("STE-GPT-ERROR validateInvoiceAvailability", error);
         return {
             status: "E",
             message: "Unable to validate the invoice number at this time. Please try again later.",

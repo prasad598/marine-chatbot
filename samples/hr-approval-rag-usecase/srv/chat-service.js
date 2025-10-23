@@ -6,8 +6,32 @@ const { handleMemoryBeforeRagCall, handleMemoryAfterRagCall } = require('./memor
 userId = cds.env.requires["SUCCESS_FACTORS_CREDENTIALS"]["USER_ID"]
 
 const tableName = 'SAP_TISCE_DEMO_DOCUMENTCHUNK'; 
-const embeddingColumn  = 'EMBEDDING'; 
+const embeddingColumn  = 'EMBEDDING';
 const contentColumn = 'TEXT_CHUNK';
+
+function normalizeInvoiceNumber(rawValue) {
+    if (rawValue === undefined || rawValue === null) {
+        return "";
+    }
+    const digitsOnly = `${rawValue}`.replace(/\D/g, "").trim();
+    if (!digitsOnly) {
+        return "";
+    }
+    const truncated = digitsOnly.length > 10 ? digitsOnly.slice(-10) : digitsOnly;
+    return truncated.padStart(10, '0');
+}
+
+function extractInvoiceNumberFromText(text) {
+    if (!text) {
+        return "";
+    }
+    const matches = `${text}`.match(/\d{6,}/g);
+    if (!matches || matches.length === 0) {
+        return "";
+    }
+    matches.sort((a, b) => b.length - a.length);
+    return matches[0] || "";
+}
 
 const systemPrompt =
 `Your task is to classify the user question into either of the four categories: invoice-request-query, download-invoice, customer-analytics or generic-query\n
@@ -66,6 +90,7 @@ c. if the user does not input exact dates and only mentions week, fill the dates
 3. If the category of the user question is "download-invoice",
 a. ensure invoice number is returned as 10 digit value. add leading zeros if required.
 b. if user input does not have an invoice number respond with invoiceNumber as empty string.
+c. Treat common misspellings of the word invoice (for example: inovice, invioce, invice) as referring to invoices when interpreting the user request.
 
 
 4. If the category of the user question is "soa-request",
@@ -349,7 +374,6 @@ module.exports = function () {
 
     this.on('getChatRagResponse', async (req) => {
         try {
-            console.log("module.exports getChatRagResponse start Prasad"+req.data);
             //request input data
             const { conversationId, messageId, message_time, user_id, user_query } = req.data;
             const { Conversation, Message } = this.entities;
@@ -373,12 +397,8 @@ module.exports = function () {
             };
 
             const determinationResponse = await vectorplugin.getChatCompletion(payload)
-            console.log("STE-GPT-INFO determinationResponse "+determinationResponse);
             const determinationJson = JSON.parse(determinationResponse.content);
             const category = determinationJson?.category ;
-            
-            
-            console.log("STE-GPT-INFO determinationJson "+JSON.stringify(determinationJson));
 
             if (! taskCategory.hasOwnProperty(category)) {
                 throw new Error(`${category} is not in the supported`);
@@ -426,13 +446,10 @@ module.exports = function () {
             if (category === "download-invoice")
             {
                 const rawInvoiceNumber = determinationJson?.invoiceNumber;
-                let invoiceNumber = "";
-                if (rawInvoiceNumber !== undefined && rawInvoiceNumber !== null) {
-                    const parsedInvoiceNumber = `${rawInvoiceNumber}`.trim();
-                    const digitsOnlyInvoiceNumber = parsedInvoiceNumber.replace(/\D/g, "");
-                    if (digitsOnlyInvoiceNumber.length > 0) {
-                        invoiceNumber = digitsOnlyInvoiceNumber.padStart(10, '0');
-                    }
+                let invoiceNumber = normalizeInvoiceNumber(rawInvoiceNumber);
+                if (!invoiceNumber) {
+                    const inferredInvoiceDigits = extractInvoiceNumberFromText(user_query);
+                    invoiceNumber = normalizeInvoiceNumber(inferredInvoiceDigits);
                 }
 
                 let EStatus = "";
@@ -443,6 +460,7 @@ module.exports = function () {
                     const precheckResponse = await sf_connection_util.validateInvoiceAvailability(
                         invoiceNumber
                     );
+                    console.log("STE-GPT-INFO validateInvoiceAvailability precheck", JSON.stringify(precheckResponse));
                     EStatus = precheckResponse?.status || "";
                     EStatusMessage = precheckResponse?.message || "";
                     if (EStatus === "S") {
