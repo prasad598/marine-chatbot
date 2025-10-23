@@ -46,7 +46,6 @@ sap.ui.define([
             .then(()=>{
                 //check if data has been loaded
                 //for local testing, set mock data
-                console.log(oModel.getData());
                 if (!oModel.getData().email) {
                     oModel.setData(mock);
                 }
@@ -130,7 +129,6 @@ sap.ui.define([
                     async: true,
                     data: payload,
                     success: function (body, status, response) {
-                        console.log(response);
                         if (response.status === 200 || response.status === 201) {
                             resolve(response.responseJSON);
                         } else {

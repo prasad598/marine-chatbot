@@ -10,11 +10,9 @@ function getCurrentTimestamp() {
 // Helper method to insert the messages and update the latest conversation timestamp in db
 async function insertMessage(messageEntity, messageRecord, conversationId, conversationEntity, messageTime) {
 
-    console.log(`Inserting new message for conversation id: ${conversationId}`);
     const messageInsertionStatus = await INSERT.into(messageEntity).entries([messageRecord]);
     if (!messageInsertionStatus) { throw new Error("Insertion of message into db failed!"); };
 
-    console.log(`Updating the time for conversation id: ${conversationId}`);
     const updateConversationStatus = await UPDATE(conversationEntity).set`last_update_time = ${messageTime}`.where`cID = ${conversationId}`;
     if (updateConversationStatus !== 1) { throw new Error("Updating the conversation time failed!"); }
 }
@@ -30,8 +28,6 @@ async function handleMemoryBeforeRagCall(conversationId, messageId, message_time
 
         // If conversation is present, select messages from db and store it in memory context obj
         if (isConversationPresent.length > 0) {
-            console.log(`Retrieving messages for conversation id: ${conversationId}`);
-
             const messageSelectStmt = await SELECT.from(Message).where({ "cID_cID": conversationId }).orderBy('creation_time');
             if (messageSelectStmt.length > 0) {
                 messageSelectStmt.forEach(message => {
@@ -49,7 +45,6 @@ async function handleMemoryBeforeRagCall(conversationId, messageId, message_time
 
             const conversationTitle = await getConversationSummarization(user_query);
 
-            console.log(`Inserting new conversation for conversation id: ${conversationId}`);
             const currentTimestamp = getCurrentTimestamp()
             const conversationEntry = {
                 "cID": conversationId,

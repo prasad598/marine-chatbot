@@ -71,8 +71,7 @@ sap.ui.define([
                                 this.getView().byId("leftScreenChatList").getBinding("items").refresh();
                             }
                         })
-                        .catch((error) => {
-                            console.log(error);
+                        .catch(() => {
                             MessageToast.show(`Conversation deletion failed.`);
                         });
                     }
@@ -137,16 +136,12 @@ sap.ui.define([
 
         onAfterItemAdded: function (oEvent) {
 
-            console.log(oEvent);
-            
             const item = oEvent.getParameter("item");
             this.createEntity(item)
                 .then((id) => {
                     this.uploadContent(item, id);
                 })
-                .catch((err) => {
-                    console.log(err);
-                });
+                .catch(() => {});
         },
 
         onUploadCompleted: function (oEvent) {
@@ -252,9 +247,7 @@ sap.ui.define([
 					link.click();
 					document.body.removeChild(link);			
                 })
-                .catch((error) => {
-                    console.log(error);
-                });
+                .catch(() => {});
 
         },
 
@@ -323,7 +316,6 @@ sap.ui.define([
                     async: true,
                     data: payload,
                     success: function (body, status, response) {
-                        console.log("Success: " + response);
                         if (response.status === 200 || response.status === 201) {
                             resolve(response.responseJSON);
                         } else {
@@ -331,7 +323,6 @@ sap.ui.define([
                         }
                     },
                     error: function (response, status) {
-                        console.log("Fail: " + response);
                         if (response) {
                             if (response.responseJSON) {
                                 const msg = response.responseJSON.message || response.responseJSON.status_msg;
@@ -378,10 +369,8 @@ sap.ui.define([
 
                     MessageToast.show(`File ${fileName} with ID ${fileID} successfully deleted`);			
                 })
-                .catch((error) => {
-
-                    console.log(error.message);
-                    this.byId("fileManagementFragment").setBusy(false);	
+                .catch(() => {
+                    this.byId("fileManagementFragment").setBusy(false);
                     MessageToast.show(`File ${fileName} with ID ${fileID} deletion failed`);
                 });
         },
@@ -412,10 +401,8 @@ sap.ui.define([
                 this.byId("fileManagementFragment").setBusy(false);
                 MessageToast.show(`All embeddings successfully deleted.`);			
             })
-            .catch((error) => {
-
-                console.log(error.message);
-                this.byId("fileManagementFragment").setBusy(false);	
+            .catch(() => {
+                this.byId("fileManagementFragment").setBusy(false);
                 MessageToast.show(`Embeddings deletion failed.`);
             });
         },
@@ -456,7 +443,6 @@ sap.ui.define([
             .then(()=>{
                 // Check if data has been loaded
                 // For local testing, set mock data
-                console.log(oModel.getData());
                 if (!oModel.getData().email) {
                     oModel.setData(mock);
                 }
