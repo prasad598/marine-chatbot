@@ -25,7 +25,7 @@ function extractInvoiceNumberFromText(text) {
     if (!text) {
         return "";
     }
-    const matches = `${text}`.match(/\d{6,}/g);
+    const matches = `${text}`.match(/\d+/g);
     if (!matches || matches.length === 0) {
         return "";
     }
@@ -49,7 +49,7 @@ const systemPrompt =
  with the following format:
  {
     "category" : "download-invoice",
-    "invoiceNumber" : "invoice number provided by the user in 10 digit format"
+    "invoiceNumber" : "invoice digits provided by the user (never leave empty when digits are present)"
  }
 
 
@@ -88,7 +88,7 @@ c. if the user does not input exact dates and only mentions week, fill the dates
 
 
 3. If the category of the user question is "download-invoice",
-a. ensure invoice number is returned as 10 digit value. add leading zeros if required.
+a. always include the invoice number digits supplied by the user. You may add leading zeros to make it ten digits, but never omit the digits entirely.
 b. if the user input includes any digits that could represent an invoice number, return those digits (even if fewer than ten) so the service can normalize them; only respond with an empty invoiceNumber when no digits are present.
 c. Treat common misspellings of the word invoice (for example: inovice, invioce, invice) as referring to invoices when interpreting the user request.
 
@@ -214,6 +214,16 @@ user input: Please share the download link for invoice 248013029.
 response: {
     "category" : "download-invoice"
     "invoiceNumber" : "0248013029"
+}
+
+
+EXAMPLE10A:
+
+
+user input: Download invoice 123425231.
+response: {
+    "category" : "download-invoice"
+    "invoiceNumber" : "123425231"
 }
 
 
