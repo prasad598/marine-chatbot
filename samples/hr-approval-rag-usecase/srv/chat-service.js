@@ -428,6 +428,7 @@ module.exports = function () {
                 "customer-analytics": customerAnalyticsPrompt,
                 "soa-request": soaRequestPrompt
             };
+            let deterministicResponse = null;
 
             if (category === "invoice-request-query")
             {
@@ -493,6 +494,39 @@ module.exports = function () {
                 }
 
                 const downloadContext = { invoiceNumber, downloadUrl, EStatus, EStatusMessage };
+                console.log("STE-GPT-INFO download-invoice context", {
+                    query: user_query,
+                    invoiceNumber,
+                    EStatus,
+                    hasDownloadUrl: Boolean(downloadUrl)
+                });
+
+                if (!invoiceNumber) {
+                    deterministicResponse = {
+                        role: "assistant",
+                        content: "Kindly provide the invoice number required for the download.",
+                        additionalContents: []
+                    };
+                } else if (EStatus === "E") {
+                    deterministicResponse = {
+                        role: "assistant",
+                        content: EStatusMessage || "Invoice not found.",
+                        additionalContents: []
+                    };
+                } else if (EStatus === "S" && downloadUrl) {
+                    deterministicResponse = {
+                        role: "assistant",
+                        content: `<href>${invoiceNumber}</href>\n\n<href-value>${downloadUrl}</href-value>`,
+                        additionalContents: []
+                    };
+                } else {
+                    deterministicResponse = {
+                        role: "assistant",
+                        content: "Invoice download service is temporarily unavailable. Please try again in a few minutes.",
+                        additionalContents: []
+                    };
+                }
+
                 promptResponses["download-invoice"] = downloadRequestPrompt + ` \`\`${JSON.stringify(downloadContext)}\`\` \n`;
             }
 
@@ -582,6 +616,28 @@ module.exports = function () {
 
             //handle memory before the RAG LLM call
             const memoryContext = await handleMemoryBeforeRagCall (conversationId , messageId, message_time, user_id , user_query, Conversation, Message );
+
+            if (deterministicResponse) {
+                const responseTimestamp = new Date().toISOString();
+                await handleMemoryAfterRagCall(
+                    conversationId,
+                    responseTimestamp,
+                    deterministicResponse,
+                    Message,
+                    Conversation
+                );
+
+                const persistedResponseMessage = await SELECT.one.from(Message)
+                    .where({ "cID_cID": conversationId, "creation_time": responseTimestamp, "role": deterministicResponse.role });
+
+                return {
+                    "role": deterministicResponse.role,
+                    "content": deterministicResponse.content,
+                    "messageTime": responseTimestamp,
+                    "messageId": persistedResponseMessage?.mID,
+                    "additionalContents": deterministicResponse.additionalContents,
+                };
+            }
             
             /*Single method to perform the following :
             - Embed the input query
