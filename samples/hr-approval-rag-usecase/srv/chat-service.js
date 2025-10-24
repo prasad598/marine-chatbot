@@ -657,7 +657,8 @@ module.exports = function () {
                 30
             );
 
-            if (category === "invoice-request-query" && chatRagResponse?.completion?.content) {
+            if ((category === "invoice-request-query" || category === "customer-analytics")
+                && chatRagResponse?.completion?.content) {
                 chatRagResponse.completion.content = chatRagResponse.completion.content.replace(/\*\*/g, "");
             }
 
