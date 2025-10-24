@@ -657,6 +657,10 @@ module.exports = function () {
                 30
             );
 
+            if (category === "invoice-request-query" && chatRagResponse?.completion?.content) {
+                chatRagResponse.completion.content = chatRagResponse.completion.content.replace(/\*\*/g, "");
+            }
+
             //handle memory after the RAG LLM call
             const responseTimestamp = new Date().toISOString();
             await handleMemoryAfterRagCall (conversationId , responseTimestamp, chatRagResponse.completion, Message, Conversation);
