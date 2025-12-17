@@ -12,7 +12,7 @@ const embeddingColumn = 'EMBEDDING';
 const contentColumn = 'TEXT_CHUNK';
 
 // ---------------- SYSTEM PROMPT (classifier) ----------------
-const systemPrompt = `Classify the user question into one of the following categories: purchase-order-status, invoice-status, purchase-requisition-status, or generic-query.
+const systemPrompt = `Classify the user question into one of the following categories: purchase-order-status, invoice-status, purchase-requisition-status, status-clarification, or generic-query.
 
 Return a JSON object following the examples below.
 
@@ -39,11 +39,18 @@ For all other questions (including queries answered from the embedding/policy do
   "category": "generic-query"
 }
 
+If the user asks for a status update but does not clearly specify whether it concerns a purchase order, invoice, or purchase requisition, return:
+{
+  "category": "status-clarification",
+  "referenceNumber": "<number provided by the user if any, digits only>"
+}
+
 Rules:
 1. Always provide the number if it is mentioned; otherwise return an empty string for that field.
 2. Prefer the number explicitly associated with the document type mentioned by the user.
 3. If the request is ambiguous between purchase order and invoice, choose invoice-status when the user mentions invoice terms.
-4. Do not invent numbers.
+4. If the user asks for a status but neither the document type nor the number is clear, return status-clarification with the provided number if any.
+5. Do not invent numbers.
 `;
 
 // ---------------- CATEGORY PROMPTS ----------------
@@ -70,6 +77,7 @@ const basePrompts = {
   'purchase-order-status': purchaseOrderStatusPrompt,
   'invoice-status': invoiceStatusPrompt,
   'purchase-requisition-status': purchaseRequisitionStatusPrompt,
+  'status-clarification': genericRequestPrompt,
   'generic-query': genericRequestPrompt
 };
 
@@ -174,6 +182,27 @@ function formatInvoiceStatus(purchaseOrder, response) {
 
 // ---------------- CATEGORY HANDLERS ----------------
 const categoryHandlers = {
+  'status-clarification': async ({ determinationJson }) => {
+    const referenceNumber = determinationJson?.referenceNumber
+      ? `${determinationJson.referenceNumber}`.trim()
+      : '';
+
+    const askForType =
+      'Are you looking for the status of a purchase order, invoice, or purchase requisition?';
+
+    const content = referenceNumber
+      ? `${askForType} Please confirm what document type the number ${referenceNumber} refers to.`
+      : `${askForType} Please share the relevant document number as well.`;
+
+    return {
+      deterministic: {
+        role: 'assistant',
+        content,
+        additionalContents: []
+      }
+    };
+  },
+
   'purchase-order-status': async ({ determinationJson }) => {
     const purchaseOrder = determinationJson?.purchaseOrder
       ? `${determinationJson.purchaseOrder}`.trim()
