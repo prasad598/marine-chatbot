@@ -123,9 +123,171 @@ function joinLine(label, value) {
   return `${label}: ${val || 'N/A'}`;
 }
 
+function formatPoItemDetails(lines, it, idx, fallbackPo) {
+  const poNo = pickFirst(it, ['PO Number', 'ebeln', 'poNumber'], fallbackPo);
+  const poItem = pickFirst(it, ['PO Item', 'ebelp', 'poItem']);
+  const status = pickFirst(it, ['PO Status', 'poStatus']);
+  const delInd = pickFirst(it, ['Del. Indicator', 'loekz'], '');
+  const deleted = normBoolText(pickFirst(it, ['PO Deleted', 'poDeleted'], ''));
+  const prNo = pickFirst(it, ['PR Number', 'banfn', 'prNumber'], '');
+  const prItem = pickFirst(it, ['PR Item', 'bnfpo', 'prItem'], '');
+  const materialNo = pickFirst(it, ['Material Number', 'matnr', 'materialNumber'], '');
+  const materialDesc = pickFirst(it, ['Material Desc', 'txz01', 'materialDescription'], '');
+  const quantity = pickFirst(it, ['Quantity', 'menge', 'quantity'], '');
+  const uom = pickFirst(it, ['UOM', 'meins', 'uom'], '');
+  const netValue = pickFirst(it, ['Net Value', 'netValue'], '');
+  const currency = pickFirst(it, ['Currency', 'waers', 'currency'], '');
+  const poDate = pickFirst(it, ['PO Date', 'bedat', 'poDate'], '');
+  const vendorCode = pickFirst(it, ['Vendor Code', 'lifnr', 'vendorCode'], '');
+  const vendorName = pickFirst(it, ['Vendor Name', 'name1', 'vendorName'], '');
+  const poCreatorId = pickFirst(it, ['PO Creator ID', 'poCreatorId'], '');
+  const poCreatorName = pickFirst(it, ['PO Creator', 'poCreatorName'], '');
+  const poApproverId = pickFirst(it, ['PO Approver ID', 'poApproverId'], '');
+  const poApproverName = pickFirst(it, ['PO Approver', 'poApproverName'], '');
+  const poApproveDate = pickFirst(it, ['PO Approve Date', 'poApproveDate'], '');
+  const wbsElement = pickFirst(it, ['WBS Element', 'wbsElement'], '');
+  const costCenter = pickFirst(it, ['Cost Center', 'kostl', 'costCenter'], '');
+  const glAccount = pickFirst(it, ['GL Account', 'sakto', 'glAccount'], '');
+
+  lines.push(`${idx + 1}.`);
+  lines.push(joinLine('PO Number', poNo));
+  lines.push(joinLine('PO Item', poItem));
+  lines.push(joinLine('Status', status));
+  lines.push(joinLine('Deleted', deleted));
+  if (delInd) lines.push(joinLine('Deletion Indicator', delInd));
+  if (prNo) lines.push(joinLine('Linked PR', prItem ? `${prNo} / ${prItem}` : prNo));
+  if (materialNo) lines.push(joinLine('Material Number', materialNo));
+  if (materialDesc) lines.push(joinLine('Material Description', materialDesc));
+  if (quantity) lines.push(joinLine('Quantity', quantity));
+  if (uom) lines.push(joinLine('UOM', uom));
+  if (netValue) lines.push(joinLine('Net Value', netValue));
+  if (currency) lines.push(joinLine('Currency', currency));
+  if (poDate) lines.push(joinLine('PO Date', poDate));
+  if (vendorCode) lines.push(joinLine('Vendor Code', vendorCode));
+  if (vendorName) lines.push(joinLine('Vendor Name', vendorName));
+  if (poCreatorId) lines.push(joinLine('PO Creator ID', poCreatorId));
+  if (poCreatorName) lines.push(joinLine('PO Creator Name', poCreatorName));
+  if (poApproverId) lines.push(joinLine('PO Approver ID', poApproverId));
+  if (poApproverName) lines.push(joinLine('PO Approver Name', poApproverName));
+  if (poApproveDate) lines.push(joinLine('PO Approve Date', poApproveDate));
+  if (wbsElement) lines.push(joinLine('WBS Element', wbsElement));
+  if (costCenter) lines.push(joinLine('Cost Center', costCenter));
+  if (glAccount) lines.push(joinLine('GL Account', glAccount));
+  lines.push('');
+}
+
+function formatPrItemDetails(lines, it, idx, fallbackPr) {
+  const prNo = pickFirst(it, ['PR Number', 'banfn', 'prNumber'], fallbackPr);
+  const prItem = pickFirst(it, ['PR Item', 'bnfpo', 'prItem']);
+  const status = pickFirst(it, ['PR Status', 'prStatus']);
+  const releaseInd = pickFirst(it, ['Release ind.', 'frgkz', 'releaseIndicator'], '');
+  const releaseStatus = pickFirst(it, ['Release Status', 'releaseStatus'], '');
+  const prReleaseDate = pickFirst(it, ['PR Release Date', 'prReleaseDate'], '');
+  const prDate = pickFirst(it, ['PR Date', 'prDate'], '');
+  const prCreatorId = pickFirst(it, ['PR Creator ID', 'prCreatorId'], '');
+  const prCreatorName = pickFirst(it, ['PR Creator', 'prCreatorName'], '');
+  const prRequestorId = pickFirst(it, ['PR Requestor ID', 'prRequestorId'], '');
+  const prRequestorName = pickFirst(it, ['PR Requestor', 'prRequestorName'], '');
+  const prApproverId = pickFirst(it, ['PR Approver ID', 'prApproverId'], '');
+  const prApproverName = pickFirst(it, ['PR Approver', 'prApproverName'], '');
+  const prApproveDate = pickFirst(it, ['PR Approve Date', 'prApproveDate'], '');
+  const deleted = normBoolText(pickFirst(it, ['PR Deleted', 'prDeleted'], ''));
+  const rejected = normBoolText(pickFirst(it, ['PR Rejected', 'prRejected'], ''));
+  const delInd = pickFirst(it, ['Del. Indicator', 'loekz'], '');
+  const linkedPo = pickFirst(it, ['PO Number', 'ebeln', 'poNumber'], '');
+  const linkedPoItem = pickFirst(it, ['PO Item', 'ebelp', 'poItem'], '');
+
+  lines.push(`${idx + 1}.`);
+  lines.push(joinLine('PR Number', prNo));
+  lines.push(joinLine('PR Item', prItem));
+  lines.push(joinLine('Status', status));
+  if (releaseInd) lines.push(joinLine('Release Indicator', releaseInd));
+  if (releaseStatus) lines.push(joinLine('Release Status', releaseStatus));
+  if (prReleaseDate) lines.push(joinLine('Release Date', prReleaseDate));
+  if (prDate) lines.push(joinLine('PR Date', prDate));
+  if (prCreatorId) lines.push(joinLine('PR Creator ID', prCreatorId));
+  if (prCreatorName) lines.push(joinLine('PR Creator Name', prCreatorName));
+  if (prRequestorId) lines.push(joinLine('PR Requestor ID', prRequestorId));
+  if (prRequestorName) lines.push(joinLine('PR Requestor Name', prRequestorName));
+  if (prApproverId) lines.push(joinLine('PR Approver ID', prApproverId));
+  if (prApproverName) lines.push(joinLine('PR Approver Name', prApproverName));
+  if (prApproveDate) lines.push(joinLine('PR Approve Date', prApproveDate));
+  lines.push(joinLine('Deleted', deleted));
+  lines.push(joinLine('Rejected', rejected));
+  if (delInd) lines.push(joinLine('Deletion Indicator', delInd));
+  if (linkedPo) lines.push(joinLine('Linked PO', linkedPoItem ? `${linkedPo} / ${linkedPoItem}` : linkedPo));
+  lines.push('');
+}
+
+function formatInvoiceItemDetails(lines, it, idx) {
+  const invoiceNo = pickFirst(it, ['invoiceNo', 'Invoice No', 'invoiceDocNumber']);
+  const fiscalYear = pickFirst(it, ['Fiscal Year', 'fiscalYear'], '');
+  const invoiceRef = pickFirst(it, ['Invoice Reference', 'invoiceReference'], '');
+  const vendorCode = pickFirst(it, ['Vendor Code', 'vendorCode'], '');
+  const vendorName = pickFirst(it, ['Vendor Name', 'vendorName'], '');
+  const value = pickFirst(it, ['invoiceValue', 'Invoice Value', 'grossAmount'], '');
+  const taxAmount = pickFirst(it, ['Tax Amount', 'taxAmount'], '');
+  const netAmount = pickFirst(it, ['Net Amount', 'netAmount'], '');
+  const currency = pickFirst(it, ['Currency', 'currency'], '');
+  const status = pickFirst(it, ['paymentStatus', 'Payment Status', 'livStatus', 'LIV Status'], '');
+  const docDate = pickFirst(it, ['invoiceDocDate', 'Doc Date'], '');
+  const postDate = pickFirst(it, ['invoicePostDate', 'Posting Date'], '');
+  const paymentDueOn = pickFirst(it, ['paymentDueOn', 'Payment Due On', 'paymentDueDate'], '');
+  const clearingDoc = pickFirst(it, ['Clearing Document', 'clearingDocument'], '');
+  const clearingDate = pickFirst(it, ['clearingDate', 'Clearing Date'], '');
+  const paidAmount = pickFirst(it, ['Paid Amount', 'paidAmount'], '');
+  const invCreatorId = pickFirst(it, ['Invoice Creator ID', 'invCreatorId'], '');
+  const invCreatorName = pickFirst(it, ['Invoice Creator', 'invCreatorName'], '');
+  const invApproverId = pickFirst(it, ['Invoice Approver ID', 'invApproverId'], '');
+  const invApproverName = pickFirst(it, ['Invoice Approver', 'invApproverName'], '');
+  const invApproveDate = pickFirst(it, ['Invoice Approve Date', 'invApproveDate'], '');
+  const lineItems = Array.isArray(it?.lineItems) ? it.lineItems : [];
+
+  lines.push(`${idx + 1}.`);
+  lines.push(joinLine('Invoice Number', invoiceNo));
+  if (fiscalYear) lines.push(joinLine('Fiscal Year', fiscalYear));
+  if (invoiceRef) lines.push(joinLine('Invoice Reference', invoiceRef));
+  if (vendorCode) lines.push(joinLine('Vendor Code', vendorCode));
+  if (vendorName) lines.push(joinLine('Vendor Name', vendorName));
+  if (value) lines.push(joinLine('Invoice Value', value));
+  if (taxAmount) lines.push(joinLine('Tax Amount', taxAmount));
+  if (netAmount) lines.push(joinLine('Net Amount', netAmount));
+  if (currency) lines.push(joinLine('Currency', currency));
+  if (status) lines.push(joinLine('Status', status));
+  if (docDate) lines.push(joinLine('Document Date', docDate));
+  if (postDate) lines.push(joinLine('Posting Date', postDate));
+  if (paymentDueOn) lines.push(joinLine('Payment Due On', paymentDueOn));
+  if (clearingDoc) lines.push(joinLine('Clearing Document', clearingDoc));
+  if (clearingDate) lines.push(joinLine('Clearing Date', clearingDate));
+  if (paidAmount) lines.push(joinLine('Paid Amount', paidAmount));
+  if (invCreatorId) lines.push(joinLine('Invoice Creator ID', invCreatorId));
+  if (invCreatorName) lines.push(joinLine('Invoice Creator Name', invCreatorName));
+  if (invApproverId) lines.push(joinLine('Invoice Approver ID', invApproverId));
+  if (invApproverName) lines.push(joinLine('Invoice Approver Name', invApproverName));
+  if (invApproveDate) lines.push(joinLine('Invoice Approve Date', invApproveDate));
+
+  if (lineItems.length) {
+    lines.push('Line Items:');
+    lineItems.forEach((line, lineIdx) => {
+      const lineItemNumber = pickFirst(line, ['lineItemNumber', 'Line Item Number']);
+      const poNumber = pickFirst(line, ['poNumber', 'PO Number']);
+      const poItem = pickFirst(line, ['poItem', 'PO Item']);
+      const amount = pickFirst(line, ['lineItemAmount', 'Line Item Amount']);
+      lines.push(`  ${lineIdx + 1}.`);
+      lines.push(`  ${joinLine('Line Item', lineItemNumber)}`);
+      lines.push(`  ${joinLine('PO Number', poNumber)}`);
+      lines.push(`  ${joinLine('PO Item', poItem)}`);
+      lines.push(`  ${joinLine('Amount', amount)}`);
+    });
+  }
+
+  lines.push('');
+}
+
 function formatPoStatusNice(purchaseOrder, resp) {
   const poItems = Array.isArray(resp?.poItems) ? resp.poItems : [];
   const prItems = Array.isArray(resp?.prItems) ? resp.prItems : [];
+  const invoiceItems = Array.isArray(resp?.invoiceItems) ? resp.invoiceItems : [];
 
   const lines = [];
   lines.push(`Purchase Order Status (PO: ${purchaseOrder})`);
@@ -136,24 +298,7 @@ function formatPoStatusNice(purchaseOrder, resp) {
     lines.push('No PO items returned.');
   } else {
     poItems.forEach((it, idx) => {
-      const poNo = pickFirst(it, ['PO Number', 'ebeln'], purchaseOrder);
-      const poItem = pickFirst(it, ['PO Item', 'ebelp']);
-      const status = pickFirst(it, ['PO Status', 'poStatus']);
-      const delInd = pickFirst(it, ['Del. Indicator', 'loekz'], '');
-      const deleted = normBoolText(pickFirst(it, ['PO Deleted', 'poDeleted'], ''));
-
-      lines.push(`${idx + 1}.`);
-      lines.push(joinLine('PO Number', poNo));
-      lines.push(joinLine('PO Item', poItem));
-      lines.push(joinLine('Status', status));
-      lines.push(joinLine('Deleted', deleted));
-      if (delInd) lines.push(joinLine('Deletion Indicator', delInd));
-
-      const prNo = pickFirst(it, ['PR Number', 'banfn'], '');
-      const prItem = pickFirst(it, ['PR Item', 'bnfpo'], '');
-      if (prNo) lines.push(joinLine('Linked PR', prItem ? `${prNo} / ${prItem}` : prNo));
-
-      lines.push('');
+      formatPoItemDetails(lines, it, idx, purchaseOrder);
     });
   }
 
@@ -162,32 +307,16 @@ function formatPoStatusNice(purchaseOrder, resp) {
     lines.push('No related PR items returned.');
   } else {
     prItems.forEach((it, idx) => {
-      const prNo = pickFirst(it, ['PR Number', 'banfn']);
-      const prItem = pickFirst(it, ['PR Item', 'bnfpo']);
-      const status = pickFirst(it, ['PR Status', 'prStatus']);
-      const releaseStatus = pickFirst(it, ['Release Status'], '');
-      const releaseInd = pickFirst(it, ['Release ind.', 'frgkz'], '');
-      const deleted = normBoolText(pickFirst(it, ['PR Deleted', 'prDeleted'], ''));
-      const rejected = normBoolText(pickFirst(it, ['PR Rejected', 'prRejected'], ''));
-      const prReleaseDate = pickFirst(it, ['PR Release Date', 'prReleaseDate'], '');
-      const delInd = pickFirst(it, ['Del. Indicator', 'loekz'], '');
+      formatPrItemDetails(lines, it, idx);
+    });
+  }
 
-      lines.push(`${idx + 1}.`);
-      lines.push(joinLine('PR Number', prNo));
-      lines.push(joinLine('PR Item', prItem));
-      lines.push(joinLine('Status', status));
-      if (releaseStatus) lines.push(joinLine('Release Status', releaseStatus));
-      if (releaseInd) lines.push(joinLine('Release Indicator', releaseInd));
-      if (prReleaseDate) lines.push(joinLine('Release Date', prReleaseDate));
-      lines.push(joinLine('Deleted', deleted));
-      lines.push(joinLine('Rejected', rejected));
-      if (delInd) lines.push(joinLine('Deletion Indicator', delInd));
-
-      const linkedPo = pickFirst(it, ['PO Number', 'ebeln'], '');
-      const linkedPoItem = pickFirst(it, ['PO Item', 'ebelp'], '');
-      if (linkedPo) lines.push(joinLine('Linked PO', linkedPoItem ? `${linkedPo} / ${linkedPoItem}` : linkedPo));
-
-      lines.push('');
+  lines.push('Related Invoices:');
+  if (!invoiceItems.length) {
+    lines.push('No related invoice items returned.');
+  } else {
+    invoiceItems.forEach((it, idx) => {
+      formatInvoiceItemDetails(lines, it, idx);
     });
   }
 
@@ -197,6 +326,7 @@ function formatPoStatusNice(purchaseOrder, resp) {
 function formatPrStatusNice(purchaseRequisition, resp) {
   const poItems = Array.isArray(resp?.poItems) ? resp.poItems : [];
   const prItems = Array.isArray(resp?.prItems) ? resp.prItems : [];
+  const invoiceItems = Array.isArray(resp?.invoiceItems) ? resp.invoiceItems : [];
 
   const lines = [];
   lines.push(`Purchase Requisition Status (PR: ${purchaseRequisition})`);
@@ -207,30 +337,7 @@ function formatPrStatusNice(purchaseRequisition, resp) {
     lines.push('No PR items returned.');
   } else {
     prItems.forEach((it, idx) => {
-      const prNo = pickFirst(it, ['PR Number', 'banfn'], purchaseRequisition);
-      const prItem = pickFirst(it, ['PR Item', 'bnfpo']);
-      const status = pickFirst(it, ['PR Status', 'prStatus']);
-      const releaseStatus = pickFirst(it, ['Release Status'], '');
-      const releaseInd = pickFirst(it, ['Release ind.', 'frgkz'], '');
-      const deleted = normBoolText(pickFirst(it, ['PR Deleted', 'prDeleted'], ''));
-      const rejected = normBoolText(pickFirst(it, ['PR Rejected', 'prRejected'], ''));
-      const prReleaseDate = pickFirst(it, ['PR Release Date', 'prReleaseDate'], '');
-
-      lines.push(`${idx + 1}.`);
-      lines.push(joinLine('PR Number', prNo));
-      lines.push(joinLine('PR Item', prItem));
-      lines.push(joinLine('Status', status));
-      if (releaseStatus) lines.push(joinLine('Release Status', releaseStatus));
-      if (releaseInd) lines.push(joinLine('Release Indicator', releaseInd));
-      if (prReleaseDate) lines.push(joinLine('Release Date', prReleaseDate));
-      lines.push(joinLine('Deleted', deleted));
-      lines.push(joinLine('Rejected', rejected));
-
-      const linkedPo = pickFirst(it, ['PO Number', 'ebeln'], '');
-      const linkedPoItem = pickFirst(it, ['PO Item', 'ebelp'], '');
-      if (linkedPo) lines.push(joinLine('Linked PO', linkedPoItem ? `${linkedPo} / ${linkedPoItem}` : linkedPo));
-
-      lines.push('');
+      formatPrItemDetails(lines, it, idx, purchaseRequisition);
     });
   }
 
@@ -239,14 +346,16 @@ function formatPrStatusNice(purchaseRequisition, resp) {
     lines.push('No related PO items returned.');
   } else {
     poItems.forEach((it, idx) => {
-      const poNo = pickFirst(it, ['PO Number', 'ebeln']);
-      const poItem = pickFirst(it, ['PO Item', 'ebelp']);
-      const status = pickFirst(it, ['PO Status', 'poStatus']);
-      lines.push(`${idx + 1}.`);
-      lines.push(joinLine('PO Number', poNo));
-      lines.push(joinLine('PO Item', poItem));
-      lines.push(joinLine('Status', status));
-      lines.push('');
+      formatPoItemDetails(lines, it, idx);
+    });
+  }
+
+  lines.push('Related Invoices:');
+  if (!invoiceItems.length) {
+    lines.push('No related invoice items returned.');
+  } else {
+    invoiceItems.forEach((it, idx) => {
+      formatInvoiceItemDetails(lines, it, idx);
     });
   }
 
@@ -266,21 +375,7 @@ function formatInvoiceStatusNice(purchaseOrder, resp) {
 
   lines.push('Invoice Items:');
   items.forEach((it, idx) => {
-    const invoiceNo = pickFirst(it, ['invoiceNo', 'Invoice No']);
-    const value = pickFirst(it, ['invoiceValue', 'Invoice Value']);
-    const status = pickFirst(it, ['livStatus', 'LIV Status']);
-    const docDate = pickFirst(it, ['invoiceDocDate', 'Doc Date']);
-    const postDate = pickFirst(it, ['invoicePostDate', 'Posting Date']);
-    const paymentDueOn = pickFirst(it, ['paymentDueOn', 'Payment Due On'], '');
-
-    lines.push(`${idx + 1}.`);
-    lines.push(joinLine('Invoice Number', invoiceNo));
-    lines.push(joinLine('Invoice Value', value));
-    lines.push(joinLine('Status', status));
-    lines.push(joinLine('Document Date', docDate));
-    lines.push(joinLine('Posting Date', postDate));
-    if (paymentDueOn) lines.push(joinLine('Payment Due On', paymentDueOn));
-    lines.push('');
+    formatInvoiceItemDetails(lines, it, idx);
   });
 
   return lines.join('\n');
@@ -327,19 +422,7 @@ function formatDocumentStatusNice(docType, numbers, resp) {
       lines.push('No PO items returned.');
     } else {
       poItems.forEach((it, idx) => {
-        const poNo = pickFirst(it, ['PO Number', 'ebeln']);
-        const poItem = pickFirst(it, ['PO Item', 'ebelp']);
-        const status = pickFirst(it, ['PO Status', 'poStatus']);
-        const deleted = normBoolText(pickFirst(it, ['PO Deleted', 'poDeleted'], ''));
-        lines.push(`${idx + 1}.`);
-        lines.push(joinLine('PO Number', poNo));
-        lines.push(joinLine('PO Item', poItem));
-        lines.push(joinLine('Status', status));
-        lines.push(joinLine('Deleted', deleted));
-        const prNo = pickFirst(it, ['PR Number', 'banfn'], '');
-        const prItem = pickFirst(it, ['PR Item', 'bnfpo'], '');
-        if (prNo) lines.push(joinLine('Linked PR', prItem ? `${prNo} / ${prItem}` : prNo));
-        lines.push('');
+        formatPoItemDetails(lines, it, idx);
       });
     }
 
@@ -348,18 +431,16 @@ function formatDocumentStatusNice(docType, numbers, resp) {
       lines.push('No related PR items returned.');
     } else {
       prItems.forEach((it, idx) => {
-        const prNo = pickFirst(it, ['PR Number', 'banfn']);
-        const prItem = pickFirst(it, ['PR Item', 'bnfpo']);
-        const status = pickFirst(it, ['PR Status', 'prStatus']);
-        const releaseInd = pickFirst(it, ['Release ind.', 'frgkz'], '');
-        const prReleaseDate = pickFirst(it, ['PR Release Date', 'prReleaseDate'], '');
-        lines.push(`${idx + 1}.`);
-        lines.push(joinLine('PR Number', prNo));
-        lines.push(joinLine('PR Item', prItem));
-        lines.push(joinLine('Status', status));
-        if (releaseInd) lines.push(joinLine('Release Indicator', releaseInd));
-        if (prReleaseDate) lines.push(joinLine('Release Date', prReleaseDate));
-        lines.push('');
+        formatPrItemDetails(lines, it, idx);
+      });
+    }
+
+    lines.push('Related Invoices:');
+    if (!invoiceItems.length) {
+      lines.push('No related invoice items returned.');
+    } else {
+      invoiceItems.forEach((it, idx) => {
+        formatInvoiceItemDetails(lines, it, idx);
       });
     }
 
@@ -372,21 +453,7 @@ function formatDocumentStatusNice(docType, numbers, resp) {
       lines.push('No PR items returned.');
     } else {
       prItems.forEach((it, idx) => {
-        const prNo = pickFirst(it, ['PR Number', 'banfn']);
-        const prItem = pickFirst(it, ['PR Item', 'bnfpo']);
-        const status = pickFirst(it, ['PR Status', 'prStatus']);
-        const releaseInd = pickFirst(it, ['Release ind.', 'frgkz'], '');
-        const prReleaseDate = pickFirst(it, ['PR Release Date', 'prReleaseDate'], '');
-        lines.push(`${idx + 1}.`);
-        lines.push(joinLine('PR Number', prNo));
-        lines.push(joinLine('PR Item', prItem));
-        lines.push(joinLine('Status', status));
-        if (releaseInd) lines.push(joinLine('Release Indicator', releaseInd));
-        if (prReleaseDate) lines.push(joinLine('Release Date', prReleaseDate));
-        const linkedPo = pickFirst(it, ['PO Number', 'ebeln'], '');
-        const linkedPoItem = pickFirst(it, ['PO Item', 'ebelp'], '');
-        if (linkedPo) lines.push(joinLine('Linked PO', linkedPoItem ? `${linkedPo} / ${linkedPoItem}` : linkedPo));
-        lines.push('');
+        formatPrItemDetails(lines, it, idx);
       });
     }
 
@@ -395,14 +462,16 @@ function formatDocumentStatusNice(docType, numbers, resp) {
       lines.push('No related PO items returned.');
     } else {
       poItems.forEach((it, idx) => {
-        const poNo = pickFirst(it, ['PO Number', 'ebeln']);
-        const poItem = pickFirst(it, ['PO Item', 'ebelp']);
-        const status = pickFirst(it, ['PO Status', 'poStatus']);
-        lines.push(`${idx + 1}.`);
-        lines.push(joinLine('PO Number', poNo));
-        lines.push(joinLine('PO Item', poItem));
-        lines.push(joinLine('Status', status));
-        lines.push('');
+        formatPoItemDetails(lines, it, idx);
+      });
+    }
+
+    lines.push('Related Invoices:');
+    if (!invoiceItems.length) {
+      lines.push('No related invoice items returned.');
+    } else {
+      invoiceItems.forEach((it, idx) => {
+        formatInvoiceItemDetails(lines, it, idx);
       });
     }
 
@@ -414,23 +483,7 @@ function formatDocumentStatusNice(docType, numbers, resp) {
     lines.push('No invoice items returned.');
   } else {
     invoiceItems.forEach((it, idx) => {
-      const invoiceNo = pickFirst(it, ['invoiceNo', 'Invoice No']);
-      const value = pickFirst(it, ['invoiceValue', 'Invoice Value']);
-      const status = pickFirst(it, ['paymentStatus', 'Payment Status', 'livStatus', 'LIV Status']);
-      const docDate = pickFirst(it, ['invoiceDocDate', 'Doc Date']);
-      const postDate = pickFirst(it, ['invoicePostDate', 'Posting Date']);
-      const paymentDueOn = pickFirst(it, ['paymentDueOn', 'Payment Due On'], '');
-      const clearingDate = pickFirst(it, ['clearingDate', 'Clearing Date'], '');
-
-      lines.push(`${idx + 1}.`);
-      lines.push(joinLine('Invoice Number', invoiceNo));
-      lines.push(joinLine('Invoice Value', value));
-      lines.push(joinLine('Status', status));
-      lines.push(joinLine('Document Date', docDate));
-      lines.push(joinLine('Posting Date', postDate));
-      if (paymentDueOn) lines.push(joinLine('Payment Due On', paymentDueOn));
-      if (clearingDate) lines.push(joinLine('Clearing Date', clearingDate));
-      lines.push('');
+      formatInvoiceItemDetails(lines, it, idx);
     });
   }
 
@@ -455,38 +508,21 @@ function formatSearchResultsNice(resp) {
   if (poItems.length) {
     lines.push('Purchase Order Items:');
     poItems.forEach((it, idx) => {
-      lines.push(`${idx + 1}.`);
-      lines.push(joinLine('PO Number', pickFirst(it, ['PO Number', 'ebeln'])));
-      lines.push(joinLine('PO Item', pickFirst(it, ['PO Item', 'ebelp'])));
-      lines.push(joinLine('Status', pickFirst(it, ['PO Status', 'poStatus'])));
-      lines.push(joinLine('Creator', pickFirst(it, ['poCreator', 'PO Creator'])));
-      lines.push(joinLine('Vendor', pickFirst(it, ['name1', 'Vendor Name'])));
-      lines.push('');
+      formatPoItemDetails(lines, it, idx);
     });
   }
 
   if (prItems.length) {
     lines.push('Purchase Requisition Items:');
     prItems.forEach((it, idx) => {
-      lines.push(`${idx + 1}.`);
-      lines.push(joinLine('PR Number', pickFirst(it, ['PR Number', 'banfn'])));
-      lines.push(joinLine('PR Item', pickFirst(it, ['PR Item', 'bnfpo'])));
-      lines.push(joinLine('Status', pickFirst(it, ['PR Status', 'prStatus'])));
-      lines.push(joinLine('Creator', pickFirst(it, ['prCreator', 'PR Creator'])));
-      lines.push(joinLine('Approver', pickFirst(it, ['prApprover', 'PR Approver'])));
-      lines.push('');
+      formatPrItemDetails(lines, it, idx);
     });
   }
 
   if (invoiceItems.length) {
     lines.push('Invoice Items:');
     invoiceItems.forEach((it, idx) => {
-      lines.push(`${idx + 1}.`);
-      lines.push(joinLine('Invoice Number', pickFirst(it, ['invoiceNo', 'Invoice No'])));
-      lines.push(joinLine('Invoice Value', pickFirst(it, ['invoiceValue', 'Invoice Value'])));
-      lines.push(joinLine('Status', pickFirst(it, ['paymentStatus', 'Payment Status'])));
-      lines.push(joinLine('Vendor', pickFirst(it, ['vendorName', 'Vendor Name'])));
-      lines.push('');
+      formatInvoiceItemDetails(lines, it, idx);
     });
   }
 
