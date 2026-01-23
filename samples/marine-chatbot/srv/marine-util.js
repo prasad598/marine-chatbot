@@ -5,7 +5,7 @@ const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 const DESTINATION = 'sthubsystem-qa';
 const SYSTEM_ALIAS = 'MRNE188';
-const STATUS_PATH = '/ptp/prpo/getstatus';
+const STATUS_PATH = '/ptp';
 
 async function callStatusService(path) {
   console.log('[MARINE] Calling status service', { destination: DESTINATION, url: path });
