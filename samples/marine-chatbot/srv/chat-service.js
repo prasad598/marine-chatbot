@@ -2,7 +2,6 @@
 
 const cds = require('@sap/cds');
 const marine_util = require('./marine-util');
-const { extractInvoiceNumberFromText } = require('./chat-utils');
 
 const PROJECT_NAME = 'MARINE_USECASE';
 
@@ -422,23 +421,80 @@ function normalizeDocNumbers(rawNumbers) {
   return `${rawNumbers}`.match(/\d+/g)?.map((value) => value.trim()).filter(Boolean) || [];
 }
 
-function extractLabeledInvoiceNumber(text) {
-  if (!text) return '';
-  const match = `${text}`.match(/invoice\s*(?:number|no\.|#|:)?\s*[:\-]?\s*(\d{4,})/i);
-  return match ? match[1] : '';
-}
-
-function isInvoiceFollowUpQuery(userQuery) {
+function hasFollowUpHint(userQuery) {
   if (!userQuery) return false;
   const text = `${userQuery}`.toLowerCase();
-  const mentionsInvoice = /\binvoice\b/.test(text);
-  const mentionsRelatedDocs = /\b(po|pr|purchase order|purchase requisition)\b/.test(text);
-  const followUpHint = /\b(above|previous|earlier|same|that|those|last|related)\b/.test(text);
-  return mentionsInvoice && (mentionsRelatedDocs || followUpHint);
+  return /\b(above|previous|earlier|same|that|those|last|related|follow[-\s]?up|again|what about)\b/.test(text);
 }
 
-async function resolveInvoiceNumberFromHistory(aiEngine, req, conversationId) {
-  if (!conversationId) return '';
+function extractDocumentContextFromText(text) {
+  if (!text) return { docType: '', documentNumbers: [] };
+  const content = `${text}`;
+  const candidates = [];
+  let fallbackDocType = '';
+
+  const headingPatterns = [
+    { docType: 'PO', regex: /Purchase Order Status\s*\(PO:\s*([^)]+)\)/i },
+    { docType: 'PR', regex: /Purchase Requisition Status\s*\(PR:\s*([^)]+)\)/i },
+    { docType: 'INV', regex: /Invoice Status\s*\(Invoice:\s*([^)]+)\)/i }
+  ];
+
+  headingPatterns.forEach(({ docType, regex }) => {
+    const match = content.match(regex);
+    if (match) {
+      const numbers = normalizeDocNumbers(match[1]);
+      if (numbers.length) {
+        candidates.push({ docType, documentNumbers: numbers, index: match.index || 0 });
+      } else if (!fallbackDocType) {
+        fallbackDocType = docType;
+      }
+    }
+  });
+
+  const statusResultsMatch = content.match(/Status Results\s*\((PO|PR|INV)\)/i);
+  if (statusResultsMatch) {
+    const docType = statusResultsMatch[1];
+    const requestedMatch = content.match(/Requested:\s*([^\n]+)/i);
+    const numbers = normalizeDocNumbers(requestedMatch ? requestedMatch[1] : '');
+    if (numbers.length) {
+      candidates.push({
+        docType,
+        documentNumbers: numbers,
+        index: statusResultsMatch.index || 0
+      });
+    } else if (!fallbackDocType) {
+      fallbackDocType = docType;
+    }
+  }
+
+  const labeledPatterns = [
+    { docType: 'PO', regex: /(?:PO Number|Purchase Order)\s*(?:Number)?\s*[:#-]?\s*(\d{4,})/gi },
+    { docType: 'PR', regex: /(?:PR Number|Purchase Requisition)\s*(?:Number)?\s*[:#-]?\s*(\d{4,})/gi },
+    { docType: 'INV', regex: /(?:Invoice Number|Invoice No\.?|Invoice)\s*(?:Number)?\s*[:#-]?\s*(\d{4,})/gi }
+  ];
+
+  labeledPatterns.forEach(({ docType, regex }) => {
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      const numbers = normalizeDocNumbers(match[1]);
+      if (numbers.length) {
+        candidates.push({ docType, documentNumbers: numbers, index: match.index || 0 });
+      } else if (!fallbackDocType) {
+        fallbackDocType = docType;
+      }
+    }
+  });
+
+  if (candidates.length) {
+    candidates.sort((a, b) => b.index - a.index);
+    return candidates[0];
+  }
+
+  return { docType: fallbackDocType, documentNumbers: [] };
+}
+
+async function resolveDocumentContextFromHistory(aiEngine, req, conversationId) {
+  if (!conversationId) return { docType: '', documentNumbers: [] };
   try {
     const historyResponse = await aiEngine.tx(req).send({
       method: 'POST',
@@ -458,6 +514,8 @@ async function resolveInvoiceNumberFromHistory(aiEngine, req, conversationId) {
       parsed?.conversation ||
       [];
 
+    let fallbackDocType = '';
+
     for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
       const content =
         messages[idx]?.content ||
@@ -465,17 +523,21 @@ async function resolveInvoiceNumberFromHistory(aiEngine, req, conversationId) {
         messages[idx]?.message ||
         '';
       if (!content) continue;
-      const labeled = extractLabeledInvoiceNumber(content);
-      if (labeled) return labeled;
-      if (/invoice/i.test(content)) {
-        const candidate = extractInvoiceNumberFromText(content);
-        if (candidate) return candidate;
+
+      const context = extractDocumentContextFromText(content);
+      if (context.documentNumbers.length) {
+        return context;
+      }
+      if (!fallbackDocType && context.docType) {
+        fallbackDocType = context.docType;
       }
     }
+
+    return { docType: fallbackDocType, documentNumbers: [] };
   } catch (error) {
-    console.warn('Unable to resolve invoice number from conversation history.', error);
+    console.warn('Unable to resolve document context from conversation history.', error);
   }
-  return '';
+  return { docType: '', documentNumbers: [] };
 }
 
 function formatDocumentStatusNice(docType, numbers, resp) {
@@ -971,18 +1033,42 @@ module.exports = function () {
         classification: determinationJson
       });
 
-      if (category === 'generic-query' && isInvoiceFollowUpQuery(user_query)) {
-        const invoiceNumberFromQuery =
-          extractLabeledInvoiceNumber(user_query) ||
-          (/invoice/i.test(user_query || '') ? extractInvoiceNumberFromText(user_query) : '');
-        const invoiceNumber =
-          invoiceNumberFromQuery ||
-          (await resolveInvoiceNumberFromHistory(aiEngine, req, conversationId));
+      let docType = normalizeDocType(determinationJson?.docType);
+      let documentNumbers = normalizeDocNumbers(
+        determinationJson?.documentNumbers ||
+          determinationJson?.purchaseOrder ||
+          determinationJson?.purchaseRequisition ||
+          determinationJson?.invoice
+      );
 
-        category = 'document-status';
+      const shouldResolveFromHistory =
+        hasFollowUpHint(user_query) ||
+        ((category === 'document-status' || category === 'status-clarification') &&
+          (!docType || documentNumbers.length === 0));
+
+      if (shouldResolveFromHistory) {
+        const historyContext = await resolveDocumentContextFromHistory(aiEngine, req, conversationId);
+        if (!docType && historyContext.docType) {
+          docType = historyContext.docType;
+        }
+        if (!documentNumbers.length && historyContext.documentNumbers.length) {
+          documentNumbers = historyContext.documentNumbers;
+        }
+      }
+
+      if ((docType || documentNumbers.length) && category !== 'document-status') {
+        if (docType && (documentNumbers.length || shouldResolveFromHistory)) {
+          category = 'document-status';
+        } else if (category === 'status-clarification') {
+          category = 'document-status';
+        }
+      }
+
+      if (docType || documentNumbers.length) {
         determinationJson = {
-          docType: 'INV',
-          documentNumbers: invoiceNumber ? [invoiceNumber] : []
+          ...determinationJson,
+          docType: docType || determinationJson?.docType,
+          documentNumbers: documentNumbers.length ? documentNumbers : determinationJson?.documentNumbers
         };
       }
 
