@@ -19,15 +19,9 @@ async function callStatusService(path) {
       }
     );
 
-    // Log status + small preview (avoid huge logs)
-    const preview =
-      typeof response?.data === 'string'
-        ? response.data.slice(0, 500)
-        : JSON.stringify(response?.data || {}).slice(0, 1000);
-
     console.log('[MARINE] Status service success', {
       httpStatus: response?.status,
-      dataPreview: preview
+      data: response?.data
     });
 
     return response?.data || null;
@@ -139,25 +133,45 @@ async function getDocumentStatus({ docType, numbers }) {
     };
   }
 
-  const query = buildQueryParams({
-    [docParam]: trimmedNumbers.join(',')
-  });
+  const fetchForDocType = async (requestedDocType) => {
+    const query = buildQueryParams({
+      [docParamMap[requestedDocType]]: trimmedNumbers.join(',')
+    });
+    const url = `${STATUS_PATH}?${query}`;
+    const data = await callStatusService(url);
 
-  const url = `${STATUS_PATH}?${query}`;
-  const data = await callStatusService(url);
+    if (!data) {
+      return {
+        success: false,
+        message: 'No response from backend service',
+        poItems: [],
+        prItems: [],
+        invoiceItems: [],
+        raw: null
+      };
+    }
 
-  if (!data) {
-    return {
-      success: false,
-      message: 'No response from backend service',
-      poItems: [],
-      prItems: [],
-      invoiceItems: [],
-      raw: null
-    };
+    return normalizeStatusResponse(data);
+  };
+
+  const primaryResponse = await fetchForDocType(docType);
+  const primaryHasItems =
+    (primaryResponse?.poItems || []).length > 0 ||
+    (primaryResponse?.prItems || []).length > 0 ||
+    (primaryResponse?.invoiceItems || []).length > 0;
+
+  if (primaryHasItems || !['PR', 'PO'].includes(docType)) {
+    return primaryResponse;
   }
 
-  return normalizeStatusResponse(data);
+  const fallbackDocType = docType === 'PR' ? 'PO' : 'PR';
+  const fallbackResponse = await fetchForDocType(fallbackDocType);
+  const fallbackHasItems =
+    (fallbackResponse?.poItems || []).length > 0 ||
+    (fallbackResponse?.prItems || []).length > 0 ||
+    (fallbackResponse?.invoiceItems || []).length > 0;
+
+  return fallbackHasItems ? fallbackResponse : primaryResponse;
 }
 
 async function searchDocuments(filters = {}) {
