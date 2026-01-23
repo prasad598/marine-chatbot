@@ -5,6 +5,7 @@ const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 const DESTINATION = 'sthubsystem-qa';
 const SYSTEM_ALIAS = 'MRNE188';
+const STATUS_PATH = '/ptp/prpo/getstatus';
 
 async function callStatusService(path) {
   console.log('[MARINE] Calling status service', { destination: DESTINATION, url: path });
@@ -42,80 +43,135 @@ async function callStatusService(path) {
   }
 }
 
-function normalizePoPrStatusResponse(data) {
+function normalizeStatusResponse(data) {
   const poItems = Array.isArray(data?.poItems) ? data.poItems : [];
   const prItems = Array.isArray(data?.prItems) ? data.prItems : [];
-
-  const success = data?.success === true && (poItems.length > 0 || prItems.length > 0);
+  const invoiceItems = Array.isArray(data?.invoiceItems) ? data.invoiceItems : [];
+  const success =
+    data?.success === true && (poItems.length > 0 || prItems.length > 0 || invoiceItems.length > 0);
+  const totalCount = Number.isFinite(data?.totalCount) ? data.totalCount : Number(data?.totalCount);
+  const resultCount = Number.isFinite(data?.resultCount) ? data.resultCount : Number(data?.resultCount);
 
   return {
     success,
     message: data?.message || '',
+    searchValues: Array.isArray(data?.searchValues) ? data.searchValues : [],
+    totalCount: Number.isNaN(totalCount) ? null : totalCount,
+    resultCount: Number.isNaN(resultCount) ? null : resultCount,
     poItems,
     prItems,
+    invoiceItems,
     raw: data
   };
 }
 
-function normalizeInvoiceStatusResponse(data) {
-  const items = Array.isArray(data?.items) ? data.items : [];
-  const success = data?.success === true && items.length > 0;
+function buildQueryParams(params) {
+  const entries = Object.entries(params || {})
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => [key, String(value)]);
 
-  return {
-    success,
-    message: data?.message || '',
-    items,
-    raw: data
+  entries.push(['ISystemAlias', SYSTEM_ALIAS]);
+
+  return entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&');
+}
+
+async function getDocumentStatus({ docType, numbers }) {
+  if (!docType || !numbers || numbers.length === 0) {
+    return {
+      success: false,
+      message: 'Document type or number missing',
+      poItems: [],
+      prItems: [],
+      invoiceItems: [],
+      raw: null
+    };
+  }
+
+  const trimmedNumbers = numbers.filter(Boolean).map((value) => String(value).trim()).filter(Boolean);
+  if (trimmedNumbers.length === 0) {
+    return {
+      success: false,
+      message: 'Document number missing',
+      poItems: [],
+      prItems: [],
+      invoiceItems: [],
+      raw: null
+    };
+  }
+
+  const docParamMap = {
+    PO: 'PurchaseOrder',
+    PR: 'PurchaseRequisition',
+    INV: 'Invoice'
   };
-}
 
-async function getPurchaseOrderStatus(purchaseOrder) {
-  if (!purchaseOrder) {
-    return { success: false, message: 'Purchase order missing', poItems: [], prItems: [], raw: null };
+  const docParam = docParamMap[docType];
+  if (!docParam) {
+    return {
+      success: false,
+      message: 'Unsupported document type',
+      poItems: [],
+      prItems: [],
+      invoiceItems: [],
+      raw: null
+    };
   }
 
-  const url = `/ptp/prpo/getstatus?PurchaseOrder=${encodeURIComponent(purchaseOrder)}&ISystemAlias=${SYSTEM_ALIAS}`;
+  const query = buildQueryParams({
+    [docParam]: trimmedNumbers.join(',')
+  });
+
+  const url = `${STATUS_PATH}?${query}`;
   const data = await callStatusService(url);
 
   if (!data) {
-    return { success: false, message: 'No response from backend service', poItems: [], prItems: [], raw: null };
+    return {
+      success: false,
+      message: 'No response from backend service',
+      poItems: [],
+      prItems: [],
+      invoiceItems: [],
+      raw: null
+    };
   }
 
-  return normalizePoPrStatusResponse(data);
+  return normalizeStatusResponse(data);
 }
 
-async function getInvoiceStatus(purchaseOrder) {
-  if (!purchaseOrder) {
-    return { success: false, message: 'Purchase order missing', items: [], raw: null };
-  }
+async function searchDocuments(filters = {}) {
+  const query = buildQueryParams({
+    DateFrom: filters.dateFrom,
+    DateTo: filters.dateTo,
+    DocType: filters.docType,
+    Creator: filters.creator,
+    Approver: filters.approver,
+    PaymentStatus: filters.paymentStatus,
+    CostCenter: filters.costCenter,
+    WBS: filters.wbs,
+    GLAccount: filters.glAccount,
+    $top: filters.top,
+    $skip: filters.skip,
+    count: filters.count ? 'X' : ''
+  });
 
-  const url = `/ptp/invoicestatus?PurchaseOrder=${encodeURIComponent(purchaseOrder)}&ISystemAlias=${SYSTEM_ALIAS}`;
+  const url = `${STATUS_PATH}?${query}`;
   const data = await callStatusService(url);
 
   if (!data) {
-    return { success: false, message: 'No response from backend service', items: [], raw: null };
+    return {
+      success: false,
+      message: 'No response from backend service',
+      poItems: [],
+      prItems: [],
+      invoiceItems: [],
+      raw: null
+    };
   }
 
-  return normalizeInvoiceStatusResponse(data);
-}
-
-async function getPurchaseRequisitionStatus(purchaseRequisition) {
-  if (!purchaseRequisition) {
-    return { success: false, message: 'Purchase requisition missing', poItems: [], prItems: [], raw: null };
-  }
-
-  const url = `/ptp/prpo/getstatus?PurchaseRequisition=${encodeURIComponent(purchaseRequisition)}&ISystemAlias=${SYSTEM_ALIAS}`;
-  const data = await callStatusService(url);
-
-  if (!data) {
-    return { success: false, message: 'No response from backend service', poItems: [], prItems: [], raw: null };
-  }
-
-  return normalizePoPrStatusResponse(data);
+  return normalizeStatusResponse(data);
 }
 
 module.exports = {
-  getPurchaseOrderStatus,
-  getInvoiceStatus,
-  getPurchaseRequisitionStatus
+  getDocumentStatus,
+  searchDocuments
 };
