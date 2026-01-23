@@ -44,24 +44,46 @@ async function callStatusService(path) {
 }
 
 function normalizeStatusResponse(data) {
-  const poItems = Array.isArray(data?.poItems) ? data.poItems : [];
-  const prItems = Array.isArray(data?.prItems) ? data.prItems : [];
-  const invoiceItems = Array.isArray(data?.invoiceItems) ? data.invoiceItems : [];
-  const success =
-    data?.success === true && (poItems.length > 0 || prItems.length > 0 || invoiceItems.length > 0);
-  const totalCount = Number.isFinite(data?.totalCount) ? data.totalCount : Number(data?.totalCount);
-  const resultCount = Number.isFinite(data?.resultCount) ? data.resultCount : Number(data?.resultCount);
+  let normalizedData = data;
+
+  if (typeof data === 'string') {
+    try {
+      normalizedData = JSON.parse(data);
+    } catch (error) {
+      normalizedData = data;
+    }
+  }
+
+  const poItems = Array.isArray(normalizedData?.poItems) ? normalizedData.poItems : [];
+  const prItems = Array.isArray(normalizedData?.prItems) ? normalizedData.prItems : [];
+  const invoiceItems = Array.isArray(normalizedData?.invoiceItems)
+    ? normalizedData.invoiceItems
+    : Array.isArray(normalizedData?.invoices)
+      ? normalizedData.invoices
+      : [];
+  const hasItems = poItems.length > 0 || prItems.length > 0 || invoiceItems.length > 0;
+  const success = normalizedData?.success === true && hasItems;
+  const totalCount = Number.isFinite(normalizedData?.totalCount)
+    ? normalizedData.totalCount
+    : Number(normalizedData?.totalCount);
+  const resultCount = Number.isFinite(normalizedData?.resultCount)
+    ? normalizedData.resultCount
+    : Number(normalizedData?.resultCount);
+  const message =
+    normalizedData?.success === true && !hasItems
+      ? 'No matching documents found.'
+      : normalizedData?.message || '';
 
   return {
     success,
-    message: data?.message || '',
-    searchValues: Array.isArray(data?.searchValues) ? data.searchValues : [],
+    message,
+    searchValues: Array.isArray(normalizedData?.searchValues) ? normalizedData.searchValues : [],
     totalCount: Number.isNaN(totalCount) ? null : totalCount,
     resultCount: Number.isNaN(resultCount) ? null : resultCount,
     poItems,
     prItems,
     invoiceItems,
-    raw: data
+    raw: normalizedData
   };
 }
 
