@@ -2,6 +2,7 @@
 
 const cds = require('@sap/cds');
 const marine_util = require('./marine-util');
+const { extractInvoiceNumberFromText } = require('./chat-utils');
 
 const PROJECT_NAME = 'MARINE_USECASE';
 
@@ -58,6 +59,9 @@ If the user asks for a status update but does not clearly specify whether it con
   "category": "status-clarification",
   "referenceNumber": "<number provided by the user if any, digits only>"
 }
+
+If the user asks for related PO/PR details for an invoice (including follow-ups like "above invoice" or "previous invoice"),
+return document-status with docType INV and any invoice number provided (or an empty array if not provided).
 
 Rules:
 1. Always provide the number(s) if mentioned; otherwise return an empty string or empty array for that field.
@@ -364,6 +368,8 @@ function formatPrStatusNice(purchaseRequisition, resp) {
 
 function formatInvoiceStatusNice(purchaseOrder, resp) {
   const items = Array.isArray(resp?.invoiceItems) ? resp.invoiceItems : [];
+  const poItems = Array.isArray(resp?.poItems) ? resp.poItems : [];
+  const prItems = Array.isArray(resp?.prItems) ? resp.prItems : [];
   const lines = [];
   lines.push(`Invoice Status (Invoice: ${purchaseOrder})`);
   lines.push('');
@@ -377,6 +383,20 @@ function formatInvoiceStatusNice(purchaseOrder, resp) {
   items.forEach((it, idx) => {
     formatInvoiceItemDetails(lines, it, idx);
   });
+
+  if (poItems.length) {
+    lines.push('Related Purchase Orders:');
+    poItems.forEach((it, idx) => {
+      formatPoItemDetails(lines, it, idx);
+    });
+  }
+
+  if (prItems.length) {
+    lines.push('Related Purchase Requisitions:');
+    prItems.forEach((it, idx) => {
+      formatPrItemDetails(lines, it, idx);
+    });
+  }
 
   return lines.join('\n');
 }
@@ -400,6 +420,62 @@ function normalizeDocNumbers(rawNumbers) {
   }
 
   return `${rawNumbers}`.match(/\d+/g)?.map((value) => value.trim()).filter(Boolean) || [];
+}
+
+function extractLabeledInvoiceNumber(text) {
+  if (!text) return '';
+  const match = `${text}`.match(/invoice\s*(?:number|no\.|#|:)?\s*[:\-]?\s*(\d{4,})/i);
+  return match ? match[1] : '';
+}
+
+function isInvoiceFollowUpQuery(userQuery) {
+  if (!userQuery) return false;
+  const text = `${userQuery}`.toLowerCase();
+  const mentionsInvoice = /\binvoice\b/.test(text);
+  const mentionsRelatedDocs = /\b(po|pr|purchase order|purchase requisition)\b/.test(text);
+  const followUpHint = /\b(above|previous|earlier|same|that|those|last|related)\b/.test(text);
+  return mentionsInvoice && (mentionsRelatedDocs || followUpHint);
+}
+
+async function resolveInvoiceNumberFromHistory(aiEngine, req, conversationId) {
+  if (!conversationId) return '';
+  try {
+    const historyResponse = await aiEngine.tx(req).send({
+      method: 'POST',
+      path: '/getConversationHistory',
+      data: { conversationId }
+    });
+
+    const parsed =
+      typeof historyResponse === 'string'
+        ? JSON.parse(historyResponse)
+        : historyResponse;
+
+    const messages =
+      (Array.isArray(parsed) && parsed) ||
+      parsed?.history ||
+      parsed?.messages ||
+      parsed?.conversation ||
+      [];
+
+    for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
+      const content =
+        messages[idx]?.content ||
+        messages[idx]?.text ||
+        messages[idx]?.message ||
+        '';
+      if (!content) continue;
+      const labeled = extractLabeledInvoiceNumber(content);
+      if (labeled) return labeled;
+      if (/invoice/i.test(content)) {
+        const candidate = extractInvoiceNumberFromText(content);
+        if (candidate) return candidate;
+      }
+    }
+  } catch (error) {
+    console.warn('Unable to resolve invoice number from conversation history.', error);
+  }
+  return '';
 }
 
 function formatDocumentStatusNice(docType, numbers, resp) {
@@ -484,6 +560,20 @@ function formatDocumentStatusNice(docType, numbers, resp) {
   } else {
     invoiceItems.forEach((it, idx) => {
       formatInvoiceItemDetails(lines, it, idx);
+    });
+  }
+
+  if (poItems.length) {
+    lines.push('Related Purchase Orders:');
+    poItems.forEach((it, idx) => {
+      formatPoItemDetails(lines, it, idx);
+    });
+  }
+
+  if (prItems.length) {
+    lines.push('Related Purchase Requisitions:');
+    prItems.forEach((it, idx) => {
+      formatPrItemDetails(lines, it, idx);
     });
   }
 
@@ -873,13 +963,28 @@ module.exports = function () {
         }
       });
 
-      const category = classifyResult?.category;
-      const determinationJson = JSON.parse(classifyResult?.determinationJson || '{}');
+      let category = classifyResult?.category;
+      let determinationJson = JSON.parse(classifyResult?.determinationJson || '{}');
 
       console.log('AI ENGINE Classification', {
         query: user_query,
         classification: determinationJson
       });
+
+      if (category === 'generic-query' && isInvoiceFollowUpQuery(user_query)) {
+        const invoiceNumberFromQuery =
+          extractLabeledInvoiceNumber(user_query) ||
+          (/invoice/i.test(user_query || '') ? extractInvoiceNumberFromText(user_query) : '');
+        const invoiceNumber =
+          invoiceNumberFromQuery ||
+          (await resolveInvoiceNumberFromHistory(aiEngine, req, conversationId));
+
+        category = 'document-status';
+        determinationJson = {
+          docType: 'INV',
+          documentNumbers: invoiceNumber ? [invoiceNumber] : []
+        };
+      }
 
       if (!basePrompts[category]) {
         throw new Error(`${category} is not in the supported categories`);
