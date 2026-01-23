@@ -7,6 +7,22 @@ const DESTINATION = 'sthubsystem-qa';
 const SYSTEM_ALIAS = 'MRNE188';
 const STATUS_PATH = '/ptp';
 
+function formatRawLogData(data) {
+  if (data === undefined) {
+    return data;
+  }
+
+  if (Buffer.isBuffer(data)) {
+    return data.toString('utf8');
+  }
+
+  if (typeof data === 'string') {
+    return data;
+  }
+
+  return JSON.stringify(data);
+}
+
 async function callStatusService(path) {
   console.log('[MARINE] Calling status service', { destination: DESTINATION, url: path });
 
@@ -19,10 +35,8 @@ async function callStatusService(path) {
       }
     );
 
-    console.log('[MARINE] Status service success', {
-      httpStatus: response?.status,
-      data: response?.data
-    });
+    console.log('[MARINE] Status service success', { httpStatus: response?.status });
+    console.log('[MARINE] Status service raw response', formatRawLogData(response?.data));
 
     return response?.data || null;
   } catch (error) {
@@ -31,7 +45,7 @@ async function callStatusService(path) {
       url: path,
       message: error?.message,
       status: error?.response?.status,
-      responseData: error?.response?.data
+      responseData: formatRawLogData(error?.response?.data)
     });
     return null;
   }
