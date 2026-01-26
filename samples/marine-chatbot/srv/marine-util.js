@@ -102,7 +102,11 @@ function buildQueryParams(params) {
 
   entries.push(['ISystemAlias', SYSTEM_ALIAS]);
 
-  return entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&');
+  const encodeQueryValue = (value) => encodeURIComponent(value).replace(/%2C/g, ',');
+
+  return entries
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeQueryValue(value)}`)
+    .join('&');
 }
 
 async function getDocumentStatus({ docType, numbers }) {
