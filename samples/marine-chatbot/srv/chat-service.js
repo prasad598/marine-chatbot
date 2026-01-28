@@ -485,6 +485,34 @@ function extractDocumentContextFromText(text) {
     }
   });
 
+  if (!fallbackDocType) {
+    const docTypeHints = [
+      { docType: 'PO', regex: /\b(po|purchase order)\b/i },
+      { docType: 'PR', regex: /\b(pr|purchase requisition)\b/i },
+      { docType: 'INV', regex: /\b(inv|invoice)\b/i }
+    ];
+
+    for (const { docType, regex } of docTypeHints) {
+      if (regex.test(content)) {
+        fallbackDocType = docType;
+        break;
+      }
+    }
+  }
+
+  const rawNumberMatches = Array.from(content.matchAll(/\b\d{6,}\b/g));
+  if (rawNumberMatches.length) {
+    const lastMatch = rawNumberMatches[rawNumberMatches.length - 1];
+    const numbers = normalizeDocNumbers(lastMatch[0]);
+    if (numbers.length) {
+      candidates.push({
+        docType: fallbackDocType,
+        documentNumbers: numbers,
+        index: lastMatch.index || 0
+      });
+    }
+  }
+
   if (candidates.length) {
     candidates.sort((a, b) => b.index - a.index);
     return candidates[0];
