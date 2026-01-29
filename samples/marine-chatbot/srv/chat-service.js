@@ -615,7 +615,7 @@ async function resolveDocumentContextFromHistory(aiEngine, req, conversationId) 
 
     return { docType: fallbackDocType, documentNumbers: [] };
   } catch (error) {
-    console.warn('Unable to resolve document context from conversation history.', error);
+    console.warn('Unable to resolve document context from conversation history.');
   }
   return { docType: '', documentNumbers: [] };
 }
@@ -1323,12 +1323,17 @@ module.exports = function () {
   }
 
   this.on('getConversationHistoryFromEngine', async (req) => {
-    const aiEngine = await cds.connect.to('AI_ENGINE');
-    return aiEngine.tx(req).send({
-      method: 'POST',
-      path: '/getConversationHistory',
-      data: { conversationId: req.data.conversationId }
-    });
+    try {
+      const aiEngine = await cds.connect.to('AI_ENGINE');
+      return aiEngine.tx(req).send({
+        method: 'POST',
+        path: '/getConversationHistory',
+        data: { conversationId: req.data.conversationId }
+      });
+    } catch (error) {
+      console.warn('Unable to fetch conversation history from AI engine.');
+      throw error;
+    }
   });
 
   // ---------------------------------------------------------------------------
