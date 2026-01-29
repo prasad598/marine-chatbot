@@ -1069,8 +1069,19 @@ module.exports = function () {
           determinationJson?.invoice
       );
 
+      if (!docType || documentNumbers.length === 0) {
+        const queryContext = extractDocumentContextFromText(user_query);
+        if (!docType && queryContext.docType) {
+          docType = queryContext.docType;
+        }
+        if (!documentNumbers.length && queryContext.documentNumbers.length) {
+          documentNumbers = queryContext.documentNumbers;
+        }
+      }
+
       const shouldResolveFromHistory =
         hasFollowUpHint(user_query) ||
+        (docType && documentNumbers.length === 0) ||
         ((category === 'document-status' || category === 'status-clarification') &&
           (!docType || documentNumbers.length === 0));
 
