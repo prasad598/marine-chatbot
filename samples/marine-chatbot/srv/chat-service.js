@@ -1164,10 +1164,12 @@ module.exports = function () {
         }
       }
 
-      if ((docType || documentNumbers.length) && category !== 'document-status') {
-        if (docType && (documentNumbers.length || shouldResolveFromHistory)) {
+      if ((docType || documentNumbers.length) && category !== 'document-search') {
+        if (category === 'status-clarification') {
           category = 'document-status';
-        } else if (category === 'status-clarification') {
+        } else if (category === 'document-status') {
+          category = 'document-status';
+        } else if (docType && (documentNumbers.length || shouldResolveFromHistory)) {
           category = 'document-status';
         }
       }
