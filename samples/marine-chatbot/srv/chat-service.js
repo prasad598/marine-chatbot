@@ -442,17 +442,26 @@ function normalizeUserFilter(value, userId) {
 function normalizePaymentStatus(value, userQuery) {
   const candidate = value ? String(value).trim().toLowerCase() : '';
   const query = userQuery ? String(userQuery).trim().toLowerCase() : '';
-  const source = candidate || query;
 
-  if (!source) return undefined;
+  if (!candidate && !query) return undefined;
 
-  if (/(payment\s+)?(complete|completed|paid)\b/.test(source)) {
-    return 'PAID';
-  }
-  if (/(payment\s+)?(due|outstanding|not\s+paid|not\s+yet\s+paid|unpaid)\b/.test(source)) {
+  if (/(payment\s+)?(due|outstanding|not\s+paid|not\s+yet\s+paid|unpaid)\b/.test(query)) {
     return 'Not yet Paid';
   }
-  if (/(partial|partially\s+paid)\b/.test(source)) {
+  if (/(payment\s+)?(complete|completed|paid)\b/.test(query)) {
+    return 'PAID';
+  }
+  if (/(partial|partially\s+paid)\b/.test(query)) {
+    return 'PARTIAL';
+  }
+
+  if (/(payment\s+)?(complete|completed|paid)\b/.test(candidate)) {
+    return 'PAID';
+  }
+  if (/(payment\s+)?(due|outstanding|not\s+paid|not\s+yet\s+paid|unpaid)\b/.test(candidate)) {
+    return 'Not yet Paid';
+  }
+  if (/(partial|partially\s+paid)\b/.test(candidate)) {
     return 'PARTIAL';
   }
 
