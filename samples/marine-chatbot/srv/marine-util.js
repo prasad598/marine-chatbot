@@ -193,6 +193,7 @@ async function getDocumentStatus({ docType, numbers }) {
 }
 
 async function searchDocuments(filters = {}) {
+  const isCountRequest = Boolean(filters.count);
   const query = buildQueryParams({
     DateFrom: filters.dateFrom,
     DateTo: filters.dateTo,
@@ -204,9 +205,9 @@ async function searchDocuments(filters = {}) {
     WBS: filters.wbs,
     GLAccount: filters.glAccount,
     Vendor: filters.vendor,
-    $top: filters.top,
-    $skip: filters.skip,
-    count: filters.count ? 'X' : ''
+    $top: isCountRequest ? undefined : filters.top,
+    $skip: isCountRequest ? undefined : filters.skip,
+    count: isCountRequest ? 'X' : ''
   });
 
   const url = `${STATUS_PATH}?${query}`;
