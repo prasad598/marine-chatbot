@@ -70,7 +70,7 @@ function normalizeStatusResponse(data) {
       ? normalizedData.invoices
       : [];
   const hasItems = poItems.length > 0 || prItems.length > 0 || invoiceItems.length > 0;
-  const success = normalizedData?.success === true && hasItems;
+  const success = normalizedData?.success === true;
   const totalCount = Number.isFinite(normalizedData?.totalCount)
     ? normalizedData.totalCount
     : Number(normalizedData?.totalCount);
@@ -78,7 +78,7 @@ function normalizeStatusResponse(data) {
     ? normalizedData.resultCount
     : Number(normalizedData?.resultCount);
   const message =
-    normalizedData?.success === true && !hasItems
+    normalizedData?.success === true && !hasItems && Number.isNaN(totalCount)
       ? 'No matching documents found.'
       : normalizedData?.message || '';
 
@@ -203,6 +203,7 @@ async function searchDocuments(filters = {}) {
     CostCenter: filters.costCenter,
     WBS: filters.wbs,
     GLAccount: filters.glAccount,
+    Vendor: filters.vendor,
     $top: filters.top,
     $skip: filters.skip,
     count: filters.count ? 'X' : ''

@@ -41,6 +41,7 @@ If the user asks to search for documents by filters (date ranges, creator, appro
     "creator": "<user id or 'me'>",
     "approver": "<user id or 'me'>",
     "paymentStatus": "<PAID | NOTPAID | PARTIAL | etc>",
+    "vendor": "<vendor id>",
     "costCenter": "<cost center>",
     "wbs": "<wbs>",
     "glAccount": "<gl account>",
@@ -411,6 +412,28 @@ function normalizeDocType(rawType) {
   return '';
 }
 
+function normalizeCountFlag(value) {
+  if (value === true) return true;
+  if (value === false || value == null) return false;
+  const normalized = String(value).trim().toLowerCase();
+  return ['true', 'yes', 'y', '1', 'x', 'count'].includes(normalized);
+}
+
+function normalizeNumber(value) {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function normalizeUserFilter(value, userId) {
+  if (!value) return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (['me', 'my', 'mine', 'myself'].includes(normalized)) {
+    return userId;
+  }
+  return value;
+}
+
 function normalizeDocNumbers(rawNumbers) {
   if (!rawNumbers) return [];
   if (Array.isArray(rawNumbers)) {
@@ -699,7 +722,7 @@ function formatDocumentStatusNice(docType, numbers, resp) {
   return lines.join('\n');
 }
 
-function formatSearchResultsNice(resp) {
+function formatSearchResultsNice(resp, { countRequested } = {}) {
   const poItems = Array.isArray(resp?.poItems) ? resp.poItems : [];
   const prItems = Array.isArray(resp?.prItems) ? resp.prItems : [];
   const invoiceItems = Array.isArray(resp?.invoiceItems) ? resp.invoiceItems : [];
@@ -736,7 +759,11 @@ function formatSearchResultsNice(resp) {
   }
 
   if (!poItems.length && !prItems.length && !invoiceItems.length) {
-    lines.push('No matching documents were returned for the selected filters.');
+    if (countRequested && resp?.totalCount !== null && resp?.totalCount !== undefined) {
+      lines.push('No line items returned for the count-only request.');
+    } else {
+      lines.push('No matching documents were returned for the selected filters.');
+    }
   }
 
   return lines.join('\n');
@@ -852,8 +879,11 @@ const categoryHandlers = {
   'document-search': async ({ determinationJson, user_query, userId }) => {
     const filters = determinationJson?.filters || {};
     const docType = normalizeDocType(filters?.docType);
-    const creator = filters?.creator === 'me' ? userId : filters?.creator;
-    const approver = filters?.approver === 'me' ? userId : filters?.approver;
+    const creator = normalizeUserFilter(filters?.creator, userId);
+    const approver = normalizeUserFilter(filters?.approver, userId);
+    const countRequested = normalizeCountFlag(filters?.count);
+    const top = normalizeNumber(filters?.top);
+    const skip = normalizeNumber(filters?.skip);
 
     const hasFilters = Object.values(filters || {}).some((value) => value);
 
@@ -874,19 +904,21 @@ const categoryHandlers = {
       creator,
       approver,
       paymentStatus: filters?.paymentStatus,
+      vendor: filters?.vendor,
       costCenter: filters?.costCenter,
       wbs: filters?.wbs,
       glAccount: filters?.glAccount,
-      top: filters?.top,
-      skip: filters?.skip,
-      count: filters?.count
+      top,
+      skip,
+      count: countRequested
     });
 
     const hasData =
       serviceResponse?.success &&
       ((Array.isArray(serviceResponse.poItems) && serviceResponse.poItems.length > 0) ||
         (Array.isArray(serviceResponse.prItems) && serviceResponse.prItems.length > 0) ||
-        (Array.isArray(serviceResponse.invoiceItems) && serviceResponse.invoiceItems.length > 0));
+        (Array.isArray(serviceResponse.invoiceItems) && serviceResponse.invoiceItems.length > 0) ||
+        (countRequested && serviceResponse?.totalCount !== null));
 
     if (!hasData) {
       const reason = serviceResponse?.message ? ` Reason: ${serviceResponse.message}` : '';
@@ -899,7 +931,7 @@ const categoryHandlers = {
       };
     }
 
-    const content = formatSearchResultsNice(serviceResponse);
+    const content = formatSearchResultsNice(serviceResponse, { countRequested });
 
     return {
       deterministic: {
