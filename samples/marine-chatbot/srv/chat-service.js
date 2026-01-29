@@ -40,7 +40,7 @@ If the user asks to search for documents by filters (date ranges, creator, appro
     "docType": "PO | PR | INV",
     "creator": "<user id or 'me'>",
     "approver": "<user id or 'me'>",
-    "paymentStatus": "<PAID | NOTPAID | PARTIAL | etc>",
+    "paymentStatus": "<PAID | Not yet Paid | PARTIAL | etc>",
     "vendor": "<vendor id>",
     "costCenter": "<cost center>",
     "wbs": "<wbs>",
@@ -50,6 +50,11 @@ If the user asks to search for documents by filters (date ranges, creator, appro
     "count": true
   }
 }
+
+Payment status guidance for search filters:
+- If the user mentions payment completed/paid, set paymentStatus to "PAID".
+- If the user mentions payment due/outstanding/not paid, set paymentStatus to "Not yet Paid".
+- Use the exact value strings above when setting paymentStatus.
 
 For all other questions (including queries answered from the embedding/policy documents), return:
 {
@@ -432,6 +437,26 @@ function normalizeUserFilter(value, userId) {
     return userId;
   }
   return value;
+}
+
+function normalizePaymentStatus(value, userQuery) {
+  const candidate = value ? String(value).trim().toLowerCase() : '';
+  const query = userQuery ? String(userQuery).trim().toLowerCase() : '';
+  const source = candidate || query;
+
+  if (!source) return undefined;
+
+  if (/(payment\s+)?(complete|completed|paid)\b/.test(source)) {
+    return 'PAID';
+  }
+  if (/(payment\s+)?(due|outstanding|not\s+paid|not\s+yet\s+paid|unpaid)\b/.test(source)) {
+    return 'Not yet Paid';
+  }
+  if (/(partial|partially\s+paid)\b/.test(source)) {
+    return 'PARTIAL';
+  }
+
+  return value ? String(value).trim() : undefined;
 }
 
 function normalizeDocNumbers(rawNumbers) {
@@ -884,6 +909,7 @@ const categoryHandlers = {
     const countRequested = normalizeCountFlag(filters?.count);
     const top = normalizeNumber(filters?.top);
     const skip = normalizeNumber(filters?.skip);
+    const paymentStatus = normalizePaymentStatus(filters?.paymentStatus, user_query);
 
     const hasFilters = Object.values(filters || {}).some((value) => value);
 
@@ -903,7 +929,7 @@ const categoryHandlers = {
       docType,
       creator,
       approver,
-      paymentStatus: filters?.paymentStatus,
+      paymentStatus,
       vendor: filters?.vendor,
       costCenter: filters?.costCenter,
       wbs: filters?.wbs,
