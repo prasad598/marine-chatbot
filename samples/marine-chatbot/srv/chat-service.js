@@ -921,11 +921,10 @@ const categoryHandlers = {
         (countRequested && serviceResponse?.totalCount !== null));
 
     if (!hasData) {
-      const reason = serviceResponse?.message ? ` Reason: ${serviceResponse.message}` : '';
       return {
         deterministic: {
           role: 'assistant',
-          content: `I could not find documents for the provided search criteria.${reason}`,
+          content: 'I could not find documents for the provided search criteria.',
           additionalContents: []
         }
       };
