@@ -9,6 +9,8 @@ const PROJECT_NAME = 'MARINE_USECASE';
 const tableName = 'SAP_TISCE_DEMO_DOCUMENTCHUNK';
 const embeddingColumn = 'EMBEDDING';
 const contentColumn = 'TEXT_CHUNK';
+const conversationContextCache = new Map();
+const CONTEXT_CACHE_TTL_MS = 30 * 60 * 1000;
 
 // ---------------- SYSTEM PROMPT (classifier) ----------------
 const systemPrompt = `Classify the user question into one of the following categories: document-status, document-search, status-clarification, or generic-query.
@@ -425,6 +427,33 @@ function hasFollowUpHint(userQuery) {
   if (!userQuery) return false;
   const text = `${userQuery}`.toLowerCase();
   return /\b(above|previous|earlier|same|that|those|last|related|follow[-\s]?up|again|what about)\b/.test(text);
+}
+
+function getCachedConversationContext(conversationId) {
+  if (!conversationId) return { docType: '', documentNumbers: [] };
+  const cached = conversationContextCache.get(conversationId);
+  if (!cached) {
+    return { docType: '', documentNumbers: [] };
+  }
+  if (Date.now() - cached.updatedAt > CONTEXT_CACHE_TTL_MS) {
+    conversationContextCache.delete(conversationId);
+    return { docType: '', documentNumbers: [] };
+  }
+  return {
+    docType: cached.docType || '',
+    documentNumbers: Array.isArray(cached.documentNumbers) ? cached.documentNumbers : []
+  };
+}
+
+function updateCachedConversationContext(conversationId, { docType, documentNumbers }) {
+  if (!conversationId) return;
+  if (!docType && (!documentNumbers || !documentNumbers.length)) return;
+  const existing = conversationContextCache.get(conversationId) || {};
+  conversationContextCache.set(conversationId, {
+    docType: docType || existing.docType || '',
+    documentNumbers: documentNumbers?.length ? documentNumbers : existing.documentNumbers || [],
+    updatedAt: Date.now()
+  });
 }
 
 function extractDocumentContextFromText(text) {
@@ -1066,7 +1095,8 @@ module.exports = function () {
         determinationJson?.documentNumbers ||
           determinationJson?.purchaseOrder ||
           determinationJson?.purchaseRequisition ||
-          determinationJson?.invoice
+          determinationJson?.invoice ||
+          determinationJson?.referenceNumber
       );
 
       if (!docType || documentNumbers.length === 0) {
@@ -1079,13 +1109,21 @@ module.exports = function () {
         }
       }
 
+      const cachedContext = getCachedConversationContext(conversationId);
+      if (!docType && cachedContext.docType) {
+        docType = cachedContext.docType;
+      }
+      if (!documentNumbers.length && cachedContext.documentNumbers.length) {
+        documentNumbers = cachedContext.documentNumbers;
+      }
+
       const shouldResolveFromHistory =
         hasFollowUpHint(user_query) ||
         (docType && documentNumbers.length === 0) ||
         ((category === 'document-status' || category === 'status-clarification') &&
           (!docType || documentNumbers.length === 0));
 
-      if (shouldResolveFromHistory) {
+      if (shouldResolveFromHistory && (!docType || documentNumbers.length === 0)) {
         const historyContext = await resolveDocumentContextFromHistory(aiEngine, req, conversationId);
         if (!docType && historyContext.docType) {
           docType = historyContext.docType;
@@ -1110,6 +1148,8 @@ module.exports = function () {
           documentNumbers: documentNumbers.length ? documentNumbers : determinationJson?.documentNumbers
         };
       }
+
+      updateCachedConversationContext(conversationId, { docType, documentNumbers });
 
       if (!basePrompts[category]) {
         throw new Error(`${category} is not in the supported categories`);
