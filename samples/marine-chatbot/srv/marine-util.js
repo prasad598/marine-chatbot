@@ -62,6 +62,7 @@ function normalizeStatusResponse(data) {
     }
   }
 
+  const isNumericPayload = typeof normalizedData === 'number';
   const poItems = Array.isArray(normalizedData?.poItems) ? normalizedData.poItems : [];
   const prItems = Array.isArray(normalizedData?.prItems) ? normalizedData.prItems : [];
   const invoiceItems = Array.isArray(normalizedData?.invoiceItems)
@@ -70,13 +71,19 @@ function normalizeStatusResponse(data) {
       ? normalizedData.invoices
       : [];
   const hasItems = poItems.length > 0 || prItems.length > 0 || invoiceItems.length > 0;
-  const success = normalizedData?.success === true;
-  const totalCount = Number.isFinite(normalizedData?.totalCount)
-    ? normalizedData.totalCount
-    : Number(normalizedData?.totalCount);
+  const totalCount = isNumericPayload
+    ? normalizedData
+    : Number.isFinite(normalizedData?.totalCount)
+      ? normalizedData.totalCount
+      : Number(normalizedData?.totalCount);
   const resultCount = Number.isFinite(normalizedData?.resultCount)
     ? normalizedData.resultCount
     : Number(normalizedData?.resultCount);
+  const success =
+    normalizedData?.success === true ||
+    isNumericPayload ||
+    Number.isFinite(totalCount) ||
+    Number.isFinite(resultCount);
   const message =
     normalizedData?.success === true && !hasItems && Number.isNaN(totalCount)
       ? 'No matching documents found.'
