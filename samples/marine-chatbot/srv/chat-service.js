@@ -487,6 +487,18 @@ function hasFollowUpHint(userQuery) {
   return /\b(above|previous|earlier|same|that|those|last|related|follow[-\s]?up|again|what about)\b/.test(text);
 }
 
+function isListFollowUp(userQuery) {
+  if (!userQuery) return false;
+  const text = `${userQuery}`.toLowerCase();
+  return /\b(list|show|display|see|provide)\b.*\b(them|those|these|all|results|entries)\b/.test(text);
+}
+
+function hasSearchFilters(filters = {}) {
+  return Object.values(filters).some(
+    (value) => value !== undefined && value !== null && value !== '' && value !== false
+  );
+}
+
 function getCachedConversationContext(conversationId) {
   if (!conversationId) return { docType: '', documentNumbers: [] };
   const cached = conversationContextCache.get(conversationId);
@@ -510,8 +522,61 @@ function updateCachedConversationContext(conversationId, { docType, documentNumb
   conversationContextCache.set(conversationId, {
     docType: docType || existing.docType || '',
     documentNumbers: documentNumbers?.length ? documentNumbers : existing.documentNumbers || [],
+    searchFilters: existing.searchFilters || null,
     updatedAt: Date.now()
   });
+}
+
+function getCachedSearchFilters(conversationId) {
+  if (!conversationId) return { filters: null };
+  const cached = conversationContextCache.get(conversationId);
+  if (!cached) return { filters: null };
+  if (Date.now() - cached.updatedAt > CONTEXT_CACHE_TTL_MS) {
+    conversationContextCache.delete(conversationId);
+    return { filters: null };
+  }
+  return {
+    filters: cached.searchFilters || null
+  };
+}
+
+function updateCachedSearchFilters(conversationId, filters) {
+  if (!conversationId || !hasSearchFilters(filters || {})) return;
+  const existing = conversationContextCache.get(conversationId) || {};
+  conversationContextCache.set(conversationId, {
+    docType: existing.docType || '',
+    documentNumbers: existing.documentNumbers || [],
+    searchFilters: { ...filters },
+    updatedAt: Date.now()
+  });
+}
+
+function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
+  const docType = normalizeDocType(filters?.docType);
+  const creator = normalizeUserFilter(filters?.creator, userId);
+  const approver = normalizeUserFilter(filters?.approver, userId);
+  const countRequested = normalizeCountFlag(filters?.count);
+  const top = normalizeNumber(filters?.top);
+  const skip = normalizeNumber(filters?.skip);
+  const paymentStatus = normalizePaymentStatus(filters?.paymentStatus, userQuery);
+
+  const normalizedFilters = {
+    ...filters,
+    docType,
+    creator,
+    approver,
+    paymentStatus,
+    top,
+    skip,
+    count: countRequested
+  };
+
+  return {
+    filters: normalizedFilters,
+    countRequested,
+    paymentStatus,
+    hasFilters: hasSearchFilters(normalizedFilters)
+  };
 }
 
 function extractDocumentContextFromText(text) {
@@ -985,17 +1050,19 @@ const categoryHandlers = {
     };
   },
 
-  'document-search': async ({ determinationJson, user_query, userId }) => {
-    const filters = determinationJson?.filters || {};
+  'document-search': async ({ determinationJson, user_query, userId, conversationId }) => {
+    const rawFilters = determinationJson?.filters || {};
+    const {
+      filters,
+      countRequested,
+      paymentStatus,
+      hasFilters
+    } = normalizeSearchFilters(rawFilters, { userId, userQuery: user_query });
     const docType = normalizeDocType(filters?.docType);
-    const creator = normalizeUserFilter(filters?.creator, userId);
-    const approver = normalizeUserFilter(filters?.approver, userId);
-    const countRequested = normalizeCountFlag(filters?.count);
-    const top = normalizeNumber(filters?.top);
-    const skip = normalizeNumber(filters?.skip);
-    const paymentStatus = normalizePaymentStatus(filters?.paymentStatus, user_query);
-
-    const hasFilters = Object.values(filters || {}).some((value) => value);
+    const creator = filters?.creator;
+    const approver = filters?.approver;
+    const top = filters?.top;
+    const skip = filters?.skip;
 
     if (!hasFilters && !user_query) {
       return {
@@ -1006,6 +1073,8 @@ const categoryHandlers = {
         }
       };
     }
+
+    updateCachedSearchFilters(conversationId, filters);
 
     const serviceResponse = await marine_util.searchDocuments({
       dateFrom: filters?.dateFrom,
@@ -1273,6 +1342,22 @@ module.exports = function () {
           determinationJson?.referenceNumber
       );
 
+      const hasIncomingFilters = hasSearchFilters(determinationJson?.filters || {});
+      const cachedSearch = getCachedSearchFilters(conversationId);
+      const shouldReuseSearchFilters = !hasIncomingFilters && cachedSearch.filters &&
+        (isListFollowUp(user_query) || hasFollowUpHint(user_query));
+
+      if (shouldReuseSearchFilters) {
+        determinationJson = {
+          ...determinationJson,
+          filters: {
+            ...cachedSearch.filters,
+            count: false
+          }
+        };
+        category = 'document-search';
+      }
+
       if (!docType || documentNumbers.length === 0) {
         const queryContext = extractDocumentContextFromText(user_query);
         if (!docType && queryContext.docType) {
@@ -1341,6 +1426,7 @@ module.exports = function () {
             determinationJson,
             user_query,
             userId: user_id,
+            conversationId,
             basePrompt: promptResponses[category]
           })) || {};
 
