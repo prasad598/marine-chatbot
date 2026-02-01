@@ -2,6 +2,7 @@
 
 const cds = require('@sap/cds');
 const marine_util = require('./marine-util');
+const { handleMemoryBeforeRagCall, handleMemoryAfterRagCall } = require('./memory-helper');
 
 const PROJECT_NAME = 'MARINE_USECASE';
 
@@ -1214,6 +1215,29 @@ module.exports = function () {
         user_query,
         appId
       } = req.data;
+      const userMessageTime = message_time || new Date().toISOString();
+
+      const memoryEntities = cds.entities('marine.chatbot') || {};
+      const { Conversation, Message } = memoryEntities;
+      const shouldPersistMemory = Boolean(conversationId && Conversation && Message);
+      let memoryContext = [];
+
+      if (shouldPersistMemory) {
+        try {
+          memoryContext = await handleMemoryBeforeRagCall(
+            conversationId,
+            messageId,
+            userMessageTime,
+            user_id,
+            user_query,
+            Conversation,
+            Message
+          );
+        } catch (error) {
+          console.warn('Unable to persist user message for memory context.', error);
+          memoryContext = [];
+        }
+      }
 
       // 1) CLASSIFICATION – REMOTE via AI Engine destination
       const aiEngine = await cds.connect.to('AI_ENGINE');
@@ -1332,6 +1356,20 @@ module.exports = function () {
           userId: user_id
         });
 
+        if (shouldPersistMemory) {
+          try {
+            await handleMemoryAfterRagCall(
+              conversationId,
+              responseTimestamp,
+              deterministicResponse,
+              Message,
+              Conversation
+            );
+          } catch (error) {
+            console.warn('Unable to persist deterministic response for memory.', error);
+          }
+        }
+
         return {
           role: deterministicResponse.role,
           content: ensureClosingLine(deterministicResponse.content),
@@ -1348,7 +1386,7 @@ module.exports = function () {
         data: {
           conversationId,
           messageId,
-          message_time,
+          message_time: userMessageTime,
           user_id,
           userQuery: user_query,
           appId: 'MARINE-CHATBOT',
@@ -1356,6 +1394,7 @@ module.exports = function () {
           embeddingColumn,
           contentColumn,
           prompt: promptResponses[category],
+          context: memoryContext,
           topK: 30
         }
       });
@@ -1400,6 +1439,20 @@ module.exports = function () {
         messageId,
         userId: user_id
       });
+
+      if (shouldPersistMemory) {
+        try {
+          await handleMemoryAfterRagCall(
+            conversationId,
+            responseTimestamp,
+            completionObj,
+            Message,
+            Conversation
+          );
+        } catch (error) {
+          console.warn('Unable to persist assistant response for memory.', error);
+        }
+      }
 
       return {
         role: completionObj.role,
