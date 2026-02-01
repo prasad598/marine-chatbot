@@ -1463,7 +1463,7 @@ module.exports = function () {
 
         return {
           role: deterministicResponse.role,
-          content,
+          content: deterministicResponse.content,
           messageTime: responseTimestamp,
           messageId: messageId || null,
           additionalContents: JSON.stringify(deterministicResponse.additionalContents || [])
