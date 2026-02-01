@@ -756,11 +756,84 @@ function formatDocumentStatusNice(docType, numbers, resp) {
   return lines.join('\n');
 }
 
-function formatSearchResultsNice(resp, { countRequested } = {}) {
+const CLOSING_LINE = 'Let me know if you need anything else.';
+
+function ensureClosingLine(content) {
+  const trimmed = (content ?? '').trim();
+  if (!trimmed) return CLOSING_LINE;
+  const normalizedClosing = CLOSING_LINE.replace(/[.!?]+$/, '').toLowerCase();
+  const normalizedContent = trimmed.replace(/[.!?]+$/, '').toLowerCase();
+  if (normalizedContent.endsWith(normalizedClosing)) {
+    return trimmed;
+  }
+  return `${trimmed}\n\n${CLOSING_LINE}`;
+}
+
+function formatDocTypeLabel(docType) {
+  switch (docType) {
+    case 'PO':
+      return 'purchase order';
+    case 'PR':
+      return 'purchase requisition';
+    case 'INV':
+      return 'invoice';
+    default:
+      return 'document';
+  }
+}
+
+function formatDateRange(dateFrom, dateTo) {
+  if (dateFrom && dateTo) {
+    return `from ${dateFrom} to ${dateTo}`;
+  }
+  if (dateFrom) {
+    return `from ${dateFrom}`;
+  }
+  if (dateTo) {
+    return `through ${dateTo}`;
+  }
+  return '';
+}
+
+function formatSearchCountSummary(totalCount, { docType, paymentStatus, dateFrom, dateTo } = {}) {
+  const label = formatDocTypeLabel(docType);
+  const pluralLabel = totalCount === 1 ? label : `${label}s`;
+  const paymentSuffix =
+    paymentStatus === 'Not yet Paid'
+      ? ' with payment due'
+      : paymentStatus === 'PAID'
+      ? ' that are paid'
+      : paymentStatus === 'PARTIAL'
+      ? ' with partial payment'
+      : '';
+  const dateRange = formatDateRange(dateFrom, dateTo);
+  const dateSuffix = dateRange ? ` ${dateRange}` : '';
+  return `There ${totalCount === 1 ? 'is' : 'are'} ${totalCount} ${pluralLabel}${paymentSuffix}${dateSuffix}.`;
+}
+
+function formatSearchResultsNice(
+  resp,
+  { countRequested, filters = {}, docType, paymentStatus, dateFrom, dateTo } = {}
+) {
   const poItems = Array.isArray(resp?.poItems) ? resp.poItems : [];
   const prItems = Array.isArray(resp?.prItems) ? resp.prItems : [];
   const invoiceItems = Array.isArray(resp?.invoiceItems) ? resp.invoiceItems : [];
   const lines = [];
+
+  const resolvedDocType = docType || filters?.docType;
+  const resolvedPaymentStatus = paymentStatus || filters?.paymentStatus;
+  const resolvedDateFrom = dateFrom || filters?.dateFrom;
+  const resolvedDateTo = dateTo || filters?.dateTo;
+  const hasLineItems = poItems.length || prItems.length || invoiceItems.length;
+
+  if (countRequested && !hasLineItems && resp?.totalCount !== null && resp?.totalCount !== undefined) {
+    return formatSearchCountSummary(resp.totalCount, {
+      docType: resolvedDocType,
+      paymentStatus: resolvedPaymentStatus,
+      dateFrom: resolvedDateFrom,
+      dateTo: resolvedDateTo
+    });
+  }
 
   lines.push('Document Search Results');
   if (resp?.totalCount !== null && resp?.totalCount !== undefined) {
@@ -965,7 +1038,13 @@ const categoryHandlers = {
       };
     }
 
-    const content = formatSearchResultsNice(serviceResponse, { countRequested });
+    const content = formatSearchResultsNice(serviceResponse, {
+      countRequested,
+      docType,
+      paymentStatus,
+      dateFrom: filters?.dateFrom,
+      dateTo: filters?.dateTo
+    });
 
     return {
       deterministic: {
@@ -1255,7 +1334,7 @@ module.exports = function () {
 
         return {
           role: deterministicResponse.role,
-          content: deterministicResponse.content,
+          content: ensureClosingLine(deterministicResponse.content),
           messageTime: responseTimestamp,
           messageId: messageId || null,
           additionalContents: JSON.stringify(deterministicResponse.additionalContents || [])
@@ -1324,7 +1403,7 @@ module.exports = function () {
 
       return {
         role: completionObj.role,
-        content: completionObj.content,
+        content: ensureClosingLine(completionObj.content),
         messageTime: responseTimestamp,
         messageId: messageId || null,
         additionalContents: JSON.stringify(additionalContentsArr)
