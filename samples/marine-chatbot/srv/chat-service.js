@@ -456,11 +456,11 @@ function normalizePaymentStatus(value, userQuery) {
     return 'PARTIAL';
   }
 
-  if (/(payment\s+)?(complete|completed|paid)\b/.test(candidate)) {
-    return 'PAID';
-  }
   if (/(payment\s+)?(due|outstanding|not\s+paid|not\s+yet\s+paid|unpaid)\b/.test(candidate)) {
     return 'Not yet Paid';
+  }
+  if (/(payment\s+)?(complete|completed|paid)\b/.test(candidate)) {
+    return 'PAID';
   }
   if (/(partial|partially\s+paid)\b/.test(candidate)) {
     return 'PARTIAL';
