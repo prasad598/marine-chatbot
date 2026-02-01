@@ -978,6 +978,7 @@ const categoryHandlers = {
       deterministic: {
         role: 'assistant',
         content,
+        includeClosingLine: true,
         additionalContents: []
       }
     };
@@ -1050,6 +1051,7 @@ const categoryHandlers = {
       deterministic: {
         role: 'assistant',
         content,
+        includeClosingLine: true,
         additionalContents: []
       }
     };
@@ -1097,6 +1099,7 @@ const categoryHandlers = {
       deterministic: {
         role: 'assistant',
         content,
+        includeClosingLine: true,
         additionalContents: []
       }
     };
@@ -1144,6 +1147,7 @@ const categoryHandlers = {
       deterministic: {
         role: 'assistant',
         content,
+        includeClosingLine: true,
         additionalContents: []
       }
     };
@@ -1191,6 +1195,7 @@ const categoryHandlers = {
       deterministic: {
         role: 'assistant',
         content,
+        includeClosingLine: true,
         additionalContents: []
       }
     };
@@ -1332,9 +1337,13 @@ module.exports = function () {
           userId: user_id
         });
 
+        const content = deterministicResponse.includeClosingLine
+          ? ensureClosingLine(deterministicResponse.content)
+          : deterministicResponse.content;
+
         return {
           role: deterministicResponse.role,
-          content: ensureClosingLine(deterministicResponse.content),
+          content,
           messageTime: responseTimestamp,
           messageId: messageId || null,
           additionalContents: JSON.stringify(deterministicResponse.additionalContents || [])
@@ -1403,7 +1412,7 @@ module.exports = function () {
 
       return {
         role: completionObj.role,
-        content: ensureClosingLine(completionObj.content),
+        content: completionObj.content,
         messageTime: responseTimestamp,
         messageId: messageId || null,
         additionalContents: JSON.stringify(additionalContentsArr)
