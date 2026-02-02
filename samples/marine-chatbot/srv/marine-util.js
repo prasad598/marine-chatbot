@@ -202,6 +202,10 @@ async function getDocumentStatus({ docType, numbers }) {
 async function searchDocuments(filters = {}) {
   const isCountRequest = Boolean(filters.count);
   const query = buildQueryParams({
+    PurchaseOrder: filters.purchaseOrder,
+    PurchaseRequisition: filters.purchaseRequisition,
+    Invoice: filters.invoice,
+    Vendor: filters.vendor,
     DateFrom: filters.dateFrom,
     DateTo: filters.dateTo,
     DocType: filters.docType,
@@ -211,10 +215,23 @@ async function searchDocuments(filters = {}) {
     CostCenter: filters.costCenter,
     WBS: filters.wbs,
     GLAccount: filters.glAccount,
-    Vendor: filters.vendor,
+    POStatus: filters.poStatus,
+    PRStatus: filters.prStatus,
+    SEStatus: filters.seStatus,
+    ApproveFromDate: filters.approveFromDate,
+    ApproveToDate: filters.approveToDate,
+    DueFromDate: filters.dueFromDate,
+    DueToDate: filters.dueToDate,
+    ReportType: filters.reportType,
+    PurchasingOrg: filters.purchasingOrg,
+    TopN: filters.topN,
+    MinValue: filters.minValue,
+    Description: filters.description,
+    OverdueDays: filters.overdueDays,
     $top: isCountRequest ? undefined : filters.top,
     $skip: isCountRequest ? undefined : filters.skip,
-    count: isCountRequest ? 'X' : ''
+    $count: isCountRequest ? 'true' : undefined,
+    count: isCountRequest ? 'X' : undefined
   });
 
   const url = `${STATUS_PATH}?${query}`;

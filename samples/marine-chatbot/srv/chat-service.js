@@ -36,16 +36,32 @@ If the user asks to search for documents by filters (date ranges, creator, appro
 {
   "category": "document-search",
   "filters": {
+    "purchaseOrder": "<PO number(s), comma-separated>",
+    "purchaseRequisition": "<PR number(s), comma-separated>",
+    "invoice": "<invoice number(s), comma-separated>",
+    "vendor": "<vendor id>",
     "dateFrom": "01.01.2025",
     "dateTo": "31.03.2025",
+    "approveFromDate": "01.08.2025",
+    "approveToDate": "31.12.2025",
+    "dueFromDate": "01.08.2025",
+    "dueToDate": "31.12.2025",
     "docType": "PO | PR | INV",
     "creator": "<user id or 'me'>",
     "approver": "<user id or 'me'>",
     "paymentStatus": "<PAID | Not yet Paid | PARTIAL | etc>",
-    "vendor": "<vendor id>",
     "costCenter": "<cost center>",
     "wbs": "<wbs>",
     "glAccount": "<gl account>",
+    "poStatus": "APPROVED | PENDING | DELETED",
+    "prStatus": "RELEASED | PENDING | REJECTED | DELETED",
+    "seStatus": "ACCEPTED | PENDING",
+    "reportType": "TOP_VENDOR | TOP_PO | SEARCH_DESC | PR_OVERDUE | PR_PENDING | INVOICE_AGING | INVOICE_OVERDUE | 3WAY_PENDING | PO_OVERDUE",
+    "purchasingOrg": "<purchasing organization>",
+    "topN": 20,
+    "minValue": 1000,
+    "description": "<keywords, comma-separated>",
+    "overdueDays": 90,
     "top": 10,
     "skip": 0,
     "count": true
@@ -56,6 +72,22 @@ Payment status guidance for search filters:
 - If the user mentions payment completed/paid, set paymentStatus to "PAID".
 - If the user mentions payment due/outstanding/not paid, set paymentStatus to "Not yet Paid".
 - Use the exact value strings above when setting paymentStatus.
+
+Examples for search filters:
+- "How many POs approved between 01/08/2025 to 31/12/2025" ->
+  { "docType": "PO", "approveFromDate": "01.08.2025", "approveToDate": "31.12.2025", "count": true }
+- "List all PRs pending for approval" ->
+  { "docType": "PR", "prStatus": "PENDING" }
+- "List all invoices overdue for payment by more than 90 days" ->
+  { "reportType": "INVOICE_OVERDUE", "overdueDays": 90 }
+- "List all POs overdue more than 90 days" ->
+  { "reportType": "PO_OVERDUE", "overdueDays": 90, "docType": "PO" }
+- "List POs issued between 25.01.2025 and 28.01.2025" ->
+  { "docType": "PO", "dateFrom": "25.01.2025", "dateTo": "28.01.2025" }
+- "POs approved between 28.01.2026 and 28.02.2026" ->
+  { "docType": "PO", "approveFromDate": "28.01.2026", "approveToDate": "28.02.2026" }
+- "Count documents due between 01.08.2025 and 31.12.2025" ->
+  { "dueFromDate": "01.08.2025", "dueToDate": "31.12.2025", "count": true }
 
 For all other questions (including queries answered from the embedding/policy documents), return:
 {
@@ -431,6 +463,11 @@ function normalizeNumber(value) {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
+function normalizeUpperValue(value) {
+  if (value === undefined || value === null || value === '') return undefined;
+  return String(value).trim().toUpperCase();
+}
+
 function normalizeUserFilter(value, userId) {
   if (!value) return value;
   const normalized = String(value).trim().toLowerCase();
@@ -558,7 +595,14 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
   const countRequested = normalizeCountFlag(filters?.count);
   const top = normalizeNumber(filters?.top);
   const skip = normalizeNumber(filters?.skip);
+  const topN = normalizeNumber(filters?.topN);
+  const minValue = normalizeNumber(filters?.minValue);
+  const overdueDays = normalizeNumber(filters?.overdueDays);
   const paymentStatus = normalizePaymentStatus(filters?.paymentStatus, userQuery);
+  const poStatus = normalizeUpperValue(filters?.poStatus);
+  const prStatus = normalizeUpperValue(filters?.prStatus);
+  const seStatus = normalizeUpperValue(filters?.seStatus);
+  const reportType = normalizeUpperValue(filters?.reportType);
 
   const normalizedFilters = {
     ...filters,
@@ -566,6 +610,13 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
     creator,
     approver,
     paymentStatus,
+    poStatus,
+    prStatus,
+    seStatus,
+    reportType,
+    topN,
+    minValue,
+    overdueDays,
     top,
     skip,
     count: countRequested
@@ -1077,16 +1128,32 @@ const categoryHandlers = {
     updateCachedSearchFilters(conversationId, filters);
 
     const serviceResponse = await marine_util.searchDocuments({
+      purchaseOrder: filters?.purchaseOrder,
+      purchaseRequisition: filters?.purchaseRequisition,
+      invoice: filters?.invoice,
+      vendor: filters?.vendor,
       dateFrom: filters?.dateFrom,
       dateTo: filters?.dateTo,
+      approveFromDate: filters?.approveFromDate,
+      approveToDate: filters?.approveToDate,
+      dueFromDate: filters?.dueFromDate,
+      dueToDate: filters?.dueToDate,
       docType,
       creator,
       approver,
       paymentStatus,
-      vendor: filters?.vendor,
       costCenter: filters?.costCenter,
       wbs: filters?.wbs,
       glAccount: filters?.glAccount,
+      poStatus: filters?.poStatus,
+      prStatus: filters?.prStatus,
+      seStatus: filters?.seStatus,
+      reportType: filters?.reportType,
+      purchasingOrg: filters?.purchasingOrg,
+      topN: filters?.topN,
+      minValue: filters?.minValue,
+      description: filters?.description,
+      overdueDays: filters?.overdueDays,
       top,
       skip,
       count: countRequested
