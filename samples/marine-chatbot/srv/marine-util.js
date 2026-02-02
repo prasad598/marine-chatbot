@@ -218,6 +218,7 @@ async function searchDocuments(filters = {}) {
     POStatus: filters.poStatus,
     PRStatus: filters.prStatus,
     SEStatus: filters.seStatus,
+    SAStatus: filters.saStatus,
     ApproveFromDate: filters.approveFromDate,
     ApproveToDate: filters.approveToDate,
     DueFromDate: filters.dueFromDate,

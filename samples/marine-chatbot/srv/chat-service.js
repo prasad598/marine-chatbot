@@ -55,8 +55,9 @@ If the user asks to search for documents by filters (date ranges, creator, appro
     "glAccount": "<gl account>",
     "poStatus": "APPROVED | PENDING | DELETED",
     "prStatus": "RELEASED | PENDING | REJECTED | DELETED",
-    "seStatus": "ACCEPTED | PENDING",
-    "reportType": "TOP_VENDOR | TOP_PO | SEARCH_DESC | PR_OVERDUE | PR_PENDING | INVOICE_AGING | INVOICE_OVERDUE | 3WAY_PENDING | PO_OVERDUE",
+    "seStatus": "RELEASED | PENDING",
+    "saStatus": "ACCEPTED | PENDING",
+    "reportType": "TOP_VENDOR | TOP_PO | SEARCH_DESC | PR_APPROVED | PR_PENDING | INVOICE_AGING | INVOICE_OVERDUE | 3WAY_PENDING | PO_OVERDUE",
     "purchasingOrg": "<purchasing organization>",
     "topN": 20,
     "minValue": 1000,
@@ -88,6 +89,21 @@ Examples for search filters:
   { "docType": "PO", "approveFromDate": "28.01.2026", "approveToDate": "28.02.2026" }
 - "Count documents due between 01.08.2025 and 31.12.2025" ->
   { "dueFromDate": "01.08.2025", "dueToDate": "31.12.2025", "count": true }
+- "Get first 100 POs" ->
+  { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "top": 100 }
+- "Get next 100 POs" ->
+  { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "top": 100, "skip": 100 }
+- "Count only (no data)" ->
+  { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "count": true }
+
+Query formation guidance:
+- Use DocType=PO/PR/INV when the user specifies purchase orders, requisitions, or invoices.
+- Use Vendor, CostCenter, WBS, GLAccount, Creator, Approver for the corresponding filters.
+- Use DateFrom/DateTo for issuance dates, ApproveFromDate/ApproveToDate for approval dates, DueFromDate/DueToDate for due dates.
+- Use POStatus/PRStatus for approval/release status, SEStatus for service entry status, SAStatus for service acceptance status.
+- Use MinValue for value thresholds and TopN for top-N reports.
+- Use ReportType for special reports (TOP_VENDOR, TOP_PO, SEARCH_DESC, PR_APPROVED, PR_PENDING, INVOICE_AGING, INVOICE_OVERDUE, 3WAY_PENDING, PO_OVERDUE).
+- Use top/skip for pagination and count=true for count-only requests.
 
 For all other questions (including queries answered from the embedding/policy documents), return:
 {
@@ -602,6 +618,7 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
   const poStatus = normalizeUpperValue(filters?.poStatus);
   const prStatus = normalizeUpperValue(filters?.prStatus);
   const seStatus = normalizeUpperValue(filters?.seStatus);
+  const saStatus = normalizeUpperValue(filters?.saStatus);
   const reportType = normalizeUpperValue(filters?.reportType);
 
   const normalizedFilters = {
@@ -613,6 +630,7 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
     poStatus,
     prStatus,
     seStatus,
+    saStatus,
     reportType,
     topN,
     minValue,
