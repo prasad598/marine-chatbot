@@ -12,6 +12,7 @@ const embeddingColumn = 'EMBEDDING';
 const contentColumn = 'TEXT_CHUNK';
 const conversationContextCache = new Map();
 const CONTEXT_CACHE_TTL_MS = 30 * 60 * 1000;
+const PAGE_SIZE_DEFAULT = 20;
 
 // ---------------- SYSTEM PROMPT (classifier) ----------------
 const systemPrompt = `Classify the user question into one of the following categories: document-status, document-search, status-clarification, or generic-query.
@@ -73,6 +74,7 @@ Payment status guidance for search filters:
 - If the user mentions payment completed/paid, set paymentStatus to "PAID".
 - If the user mentions payment due/outstanding/not paid, set paymentStatus to "Not yet Paid".
 - Use the exact value strings above when setting paymentStatus.
+- For overdue report requests (INVOICE_OVERDUE or PO_OVERDUE), do not set paymentStatus; use reportType with overdueDays only.
 
 Examples for search filters:
 - "How many POs approved between 01/08/2025 to 31/12/2025" ->
@@ -103,6 +105,7 @@ Query formation guidance:
 - Use POStatus/PRStatus for approval/release status, SEStatus for service entry status, SAStatus for service acceptance status.
 - Use MinValue for value thresholds and TopN for top-N reports.
 - Use ReportType for special reports (TOP_VENDOR, TOP_PO, SEARCH_DESC, PR_APPROVED, PR_PENDING, INVOICE_AGING, INVOICE_OVERDUE, 3WAY_PENDING, PO_OVERDUE).
+- For overdue reports, use ReportType + OverdueDays and do not include PaymentStatus.
 - Use top/skip for pagination and count=true for count-only requests.
 
 For all other questions (including queries answered from the embedding/policy documents), return:
@@ -522,6 +525,12 @@ function normalizePaymentStatus(value, userQuery) {
   return value ? String(value).trim() : undefined;
 }
 
+function isOverdueReportType(reportType) {
+  if (!reportType) return false;
+  const normalized = String(reportType).trim().toUpperCase();
+  return ['INVOICE_OVERDUE', 'PO_OVERDUE'].includes(normalized);
+}
+
 function normalizeDocNumbers(rawNumbers) {
   if (!rawNumbers) return [];
   if (Array.isArray(rawNumbers)) {
@@ -532,6 +541,20 @@ function normalizeDocNumbers(rawNumbers) {
   }
 
   return `${rawNumbers}`.match(/\d+/g)?.map((value) => value.trim()).filter(Boolean) || [];
+}
+
+function parsePaginationRequest(userQuery) {
+  if (!userQuery) return null;
+  const text = `${userQuery}`.toLowerCase();
+  const nextMatch = text.match(/\bnext\s+(\d+)\b/);
+  if (nextMatch) {
+    const size = Number(nextMatch[1]);
+    return Number.isFinite(size) && size > 0 ? { isNextPage: true, pageSize: size } : null;
+  }
+  if (/\b(next|more|continue|show\s+more|another\s+page)\b/.test(text)) {
+    return { isNextPage: true, pageSize: PAGE_SIZE_DEFAULT };
+  }
+  return null;
 }
 
 function hasFollowUpHint(userQuery) {
@@ -614,12 +637,14 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
   const topN = normalizeNumber(filters?.topN);
   const minValue = normalizeNumber(filters?.minValue);
   const overdueDays = normalizeNumber(filters?.overdueDays);
-  const paymentStatus = normalizePaymentStatus(filters?.paymentStatus, userQuery);
   const poStatus = normalizeUpperValue(filters?.poStatus);
   const prStatus = normalizeUpperValue(filters?.prStatus);
   const seStatus = normalizeUpperValue(filters?.seStatus);
   const saStatus = normalizeUpperValue(filters?.saStatus);
   const reportType = normalizeUpperValue(filters?.reportType);
+  const paymentStatus = isOverdueReportType(reportType)
+    ? undefined
+    : normalizePaymentStatus(filters?.paymentStatus, userQuery);
 
   const normalizedFilters = {
     ...filters,
@@ -946,9 +971,18 @@ function formatSearchCountSummary(totalCount, { docType, paymentStatus, dateFrom
   return `There ${totalCount === 1 ? 'is' : 'are'} ${totalCount} ${pluralLabel}${paymentSuffix}${dateSuffix}.`;
 }
 
+function buildPaginationNote({ totalCount, pageSize, skip } = {}) {
+  if (!Number.isFinite(totalCount) || totalCount <= pageSize) return '';
+  const shownStart = skip + 1;
+  const shownEnd = Math.min(skip + pageSize, totalCount);
+  const remaining = totalCount - shownEnd;
+  if (remaining <= 0) return '';
+  return `Showing ${shownStart}-${shownEnd} of ${totalCount} records (top ${pageSize}). Let me know if you want the next ${pageSize} records.`;
+}
+
 function formatSearchResultsNice(
   resp,
-  { countRequested, filters = {}, docType, paymentStatus, dateFrom, dateTo } = {}
+  { countRequested, filters = {}, docType, paymentStatus, dateFrom, dateTo, pageSize, skip } = {}
 ) {
   const poItems = Array.isArray(resp?.poItems) ? resp.poItems : [];
   const prItems = Array.isArray(resp?.prItems) ? resp.prItems : [];
@@ -1006,6 +1040,16 @@ function formatSearchResultsNice(
     } else {
       lines.push('No matching documents were returned for the selected filters.');
     }
+  }
+
+  const paginationNote = buildPaginationNote({
+    totalCount: resp?.totalCount,
+    pageSize: pageSize || PAGE_SIZE_DEFAULT,
+    skip: skip || 0
+  });
+  if (paginationNote) {
+    lines.push('');
+    lines.push(paginationNote);
   }
 
   return lines.join('\n');
@@ -1130,8 +1174,22 @@ const categoryHandlers = {
     const docType = normalizeDocType(filters?.docType);
     const creator = filters?.creator;
     const approver = filters?.approver;
-    const top = filters?.top;
-    const skip = filters?.skip;
+    const requestedTop = normalizeNumber(filters?.top);
+    const requestedSkip = normalizeNumber(filters?.skip);
+    const paginationRequest = parsePaginationRequest(user_query);
+    const pageSize = paginationRequest?.pageSize || PAGE_SIZE_DEFAULT;
+    const top = countRequested
+      ? undefined
+      : paginationRequest?.isNextPage
+        ? pageSize
+        : requestedTop && requestedTop > 0
+          ? Math.min(requestedTop, PAGE_SIZE_DEFAULT)
+          : pageSize;
+    const skip = countRequested
+      ? undefined
+      : paginationRequest?.isNextPage
+        ? (requestedSkip || 0) + pageSize
+        : requestedSkip || 0;
 
     if (!hasFilters && !user_query) {
       return {
@@ -1143,7 +1201,38 @@ const categoryHandlers = {
       };
     }
 
-    updateCachedSearchFilters(conversationId, filters);
+    const countResponse =
+      countRequested
+        ? null
+        : await marine_util.searchDocuments({
+            purchaseOrder: filters?.purchaseOrder,
+            purchaseRequisition: filters?.purchaseRequisition,
+            invoice: filters?.invoice,
+            vendor: filters?.vendor,
+            dateFrom: filters?.dateFrom,
+            dateTo: filters?.dateTo,
+            approveFromDate: filters?.approveFromDate,
+            approveToDate: filters?.approveToDate,
+            dueFromDate: filters?.dueFromDate,
+            dueToDate: filters?.dueToDate,
+            docType,
+            creator,
+            approver,
+            paymentStatus,
+            costCenter: filters?.costCenter,
+            wbs: filters?.wbs,
+            glAccount: filters?.glAccount,
+            poStatus: filters?.poStatus,
+            prStatus: filters?.prStatus,
+            seStatus: filters?.seStatus,
+            reportType: filters?.reportType,
+            purchasingOrg: filters?.purchasingOrg,
+            topN: filters?.topN,
+            minValue: filters?.minValue,
+            description: filters?.description,
+            overdueDays: filters?.overdueDays,
+            count: true
+          });
 
     const serviceResponse = await marine_util.searchDocuments({
       purchaseOrder: filters?.purchaseOrder,
@@ -1177,6 +1266,17 @@ const categoryHandlers = {
       count: countRequested
     });
 
+    if (!countRequested && countResponse?.totalCount !== null && countResponse?.totalCount !== undefined) {
+      serviceResponse.totalCount = countResponse.totalCount;
+    }
+
+    updateCachedSearchFilters(conversationId, {
+      ...filters,
+      top,
+      skip,
+      count: false
+    });
+
     const hasData =
       serviceResponse?.success &&
       ((Array.isArray(serviceResponse.poItems) && serviceResponse.poItems.length > 0) ||
@@ -1199,7 +1299,9 @@ const categoryHandlers = {
       docType,
       paymentStatus,
       dateFrom: filters?.dateFrom,
-      dateTo: filters?.dateTo
+      dateTo: filters?.dateTo,
+      pageSize: top || PAGE_SIZE_DEFAULT,
+      skip: skip || 0
     });
 
     return {
