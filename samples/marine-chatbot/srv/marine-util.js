@@ -238,6 +238,12 @@ async function searchDocuments(filters = {}) {
   });
 
   const url = `${STATUS_PATH}?${query}`;
+  console.log('[MARINE] Search request', {
+    url,
+    count: isCountRequest,
+    top: isCountRequest ? undefined : filters.top,
+    skip: isCountRequest ? undefined : filters.skip
+  });
   const data = await callStatusService(url);
 
   if (!data) {
@@ -251,7 +257,17 @@ async function searchDocuments(filters = {}) {
     };
   }
 
-  return normalizeStatusResponse(data);
+  const normalized = normalizeStatusResponse(data);
+
+  if (isCountRequest) {
+    console.log('[MARINE] Count response summary', {
+      url,
+      totalCount: normalized.totalCount,
+      resultCount: normalized.resultCount
+    });
+  }
+
+  return normalized;
 }
 
 module.exports = {
