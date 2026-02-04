@@ -1141,11 +1141,11 @@ const categoryHandlers = {
         (Array.isArray(serviceResponse.invoiceItems) && serviceResponse.invoiceItems.length > 0));
 
     if (!hasData) {
-      const reason = serviceResponse?.message ? ` Reason: ${serviceResponse.message}` : '';
       return {
         deterministic: {
           role: 'assistant',
-          content: `I cannot find status for the provided document(s).${reason}`,
+          content:
+            'No results found for the provided search criteria. Please check and provide valid data.',
           additionalContents: []
         }
       };
@@ -1340,11 +1340,11 @@ const categoryHandlers = {
         (Array.isArray(serviceResponse.prItems) && serviceResponse.prItems.length > 0));
 
     if (!hasData) {
-      const reason = serviceResponse?.message ? ` Reason: ${serviceResponse.message}` : '';
       return {
         deterministic: {
           role: 'assistant',
-          content: `I cannot find status for the provided purchase order.${reason}`,
+          content:
+            'No results found for the provided search criteria. Please check and provide valid data.',
           additionalContents: []
         }
       };
@@ -1388,11 +1388,11 @@ const categoryHandlers = {
       serviceResponse.invoiceItems.length > 0;
 
     if (!hasData) {
-      const reason = serviceResponse?.message ? ` Reason: ${serviceResponse.message}` : '';
       return {
         deterministic: {
           role: 'assistant',
-          content: `I cannot find status for the provided invoice or purchase order.${reason}`,
+          content:
+            'No results found for the provided search criteria. Please check and provide valid data.',
           additionalContents: []
         }
       };
@@ -1436,11 +1436,11 @@ const categoryHandlers = {
         (Array.isArray(serviceResponse.poItems) && serviceResponse.poItems.length > 0));
 
     if (!hasData) {
-      const reason = serviceResponse?.message ? ` Reason: ${serviceResponse.message}` : '';
       return {
         deterministic: {
           role: 'assistant',
-          content: `I cannot find status for the provided purchase requisition.${reason}`,
+          content:
+            'No results found for the provided search criteria. Please check and provide valid data.',
           additionalContents: []
         }
       };
