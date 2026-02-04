@@ -201,6 +201,8 @@ async function getDocumentStatus({ docType, numbers }) {
 
 async function searchDocuments(filters = {}) {
   const isCountRequest = Boolean(filters.count);
+  const isOverdueReport =
+    filters.reportType && ['INVOICE_OVERDUE', 'PO_OVERDUE'].includes(String(filters.reportType).trim().toUpperCase());
   const query = buildQueryParams({
     PurchaseOrder: filters.purchaseOrder,
     PurchaseRequisition: filters.purchaseRequisition,
@@ -211,7 +213,7 @@ async function searchDocuments(filters = {}) {
     DocType: filters.docType,
     Creator: filters.creator,
     Approver: filters.approver,
-    PaymentStatus: filters.paymentStatus,
+    PaymentStatus: isOverdueReport ? undefined : filters.paymentStatus,
     CostCenter: filters.costCenter,
     WBS: filters.wbs,
     GLAccount: filters.glAccount,
