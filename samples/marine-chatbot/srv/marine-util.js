@@ -62,16 +62,24 @@ function normalizeStatusResponse(data) {
     }
   }
 
+  const pickFirstArray = (obj, keys) => {
+    for (const key of keys) {
+      if (Array.isArray(obj?.[key])) {
+        return obj[key];
+      }
+    }
+    return [];
+  };
+
   const isNumericPayload = typeof normalizedData === 'number';
-  const poItems = Array.isArray(normalizedData?.poItems) ? normalizedData.poItems : [];
-  const prItems = Array.isArray(normalizedData?.prItems) ? normalizedData.prItems : [];
-  const invoiceItems = Array.isArray(normalizedData?.invoiceItems)
-    ? normalizedData.invoiceItems
-    : Array.isArray(normalizedData?.invoices)
-      ? normalizedData.invoices
-      : Array.isArray(normalizedData?.overdueInvoices)
-        ? normalizedData.overdueInvoices
-      : [];
+  const poItems = pickFirstArray(normalizedData, ['poItems', 'purchaseOrders', 'overduePurchaseOrders', 'overduePOs']);
+  const prItems = pickFirstArray(normalizedData, [
+    'prItems',
+    'purchaseRequisitions',
+    'overduePurchaseRequisitions',
+    'overduePRs'
+  ]);
+  const invoiceItems = pickFirstArray(normalizedData, ['invoiceItems', 'invoices', 'overdueInvoices']);
   const hasItems = poItems.length > 0 || prItems.length > 0 || invoiceItems.length > 0;
   const totalCount = isNumericPayload
     ? normalizedData
