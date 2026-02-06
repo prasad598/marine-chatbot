@@ -103,17 +103,18 @@ function normalizeStatusResponse(data) {
 }
 
 function buildQueryParams(params) {
+  const sanitizeQueryToken = (value) =>
+    String(value)
+      .trim()
+      .replace(/^['"]+|['"]+$/g, '');
+
   const entries = Object.entries(params || {})
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
-    .map(([key, value]) => [key, String(value)]);
+    .map(([key, value]) => [sanitizeQueryToken(key), sanitizeQueryToken(value)]);
 
   entries.push(['ISystemAlias', SYSTEM_ALIAS]);
 
-  const encodeQueryValue = (value) => encodeURIComponent(value).replace(/%2C/g, ',');
-
-  return entries
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeQueryValue(value)}`)
-    .join('&');
+  return entries.map(([key, value]) => `${key}=${value}`).join('&');
 }
 
 async function getDocumentStatus({ docType, numbers }) {
@@ -231,10 +232,9 @@ async function searchDocuments(filters = {}) {
     MinValue: filters.minValue,
     Description: filters.description,
     OverdueDays: filters.overdueDays,
-    $top: isCountRequest ? undefined : filters.top,
-    $skip: isCountRequest ? undefined : filters.skip,
-    $count: isCountRequest ? 'true' : undefined,
-    count: isCountRequest ? 'X' : undefined
+    top: isCountRequest ? undefined : filters.top,
+    skip: isCountRequest ? undefined : filters.skip,
+    count: isCountRequest ? 'true' : undefined
   });
 
   const url = `${STATUS_PATH}?${query}`;
