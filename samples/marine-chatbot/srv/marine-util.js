@@ -69,6 +69,8 @@ function normalizeStatusResponse(data) {
     ? normalizedData.invoiceItems
     : Array.isArray(normalizedData?.invoices)
       ? normalizedData.invoices
+      : Array.isArray(normalizedData?.overdueInvoices)
+        ? normalizedData.overdueInvoices
       : [];
   const hasItems = poItems.length > 0 || prItems.length > 0 || invoiceItems.length > 0;
   const totalCount = isNumericPayload
