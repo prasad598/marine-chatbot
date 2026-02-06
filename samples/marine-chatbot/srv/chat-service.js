@@ -1189,7 +1189,7 @@ const categoryHandlers = {
       ? undefined
       : paginationRequest?.isNextPage
         ? (requestedSkip || 0) + pageSize
-        : requestedSkip || 0;
+        : 0;
 
     if (!hasFilters && !user_query) {
       return {
