@@ -283,21 +283,21 @@ function formatPrItemDetails(lines, it, idx, fallbackPr) {
 }
 
 function formatInvoiceItemDetails(lines, it, idx) {
-  const invoiceNo = pickFirst(it, ['invoiceNo', 'Invoice No', 'invoiceDocNumber']);
+  const invoiceNo = pickFirst(it, ['invoiceNo', 'Invoice No', 'Invoice Number', 'invoiceNumber', 'invoiceDocNumber']);
   const fiscalYear = pickFirst(it, ['Fiscal Year', 'fiscalYear'], '');
   const invoiceRef = pickFirst(it, ['Invoice Reference', 'invoiceReference'], '');
-  const vendorCode = pickFirst(it, ['Vendor Code', 'vendorCode'], '');
-  const vendorName = pickFirst(it, ['Vendor Name', 'vendorName'], '');
-  const value = pickFirst(it, ['invoiceValue', 'Invoice Value', 'grossAmount'], '');
-  const taxAmount = pickFirst(it, ['Tax Amount', 'taxAmount'], '');
-  const netAmount = pickFirst(it, ['Net Amount', 'netAmount'], '');
-  const currency = pickFirst(it, ['Currency', 'currency'], '');
-  const status = pickFirst(it, ['paymentStatus', 'Payment Status', 'livStatus', 'LIV Status'], '');
-  const docDate = pickFirst(it, ['invoiceDocDate', 'Doc Date'], '');
-  const postDate = pickFirst(it, ['invoicePostDate', 'Posting Date'], '');
-  const paymentDueOn = pickFirst(it, ['paymentDueOn', 'Payment Due On', 'paymentDueDate'], '');
-  const clearingDoc = pickFirst(it, ['Clearing Document', 'clearingDocument'], '');
-  const clearingDate = pickFirst(it, ['clearingDate', 'Clearing Date'], '');
+  const vendorCode = pickFirst(it, ['Vendor Code', 'vendorCode', 'lifnr'], '');
+  const vendorName = pickFirst(it, ['Vendor Name', 'vendorName', 'name1'], '');
+  const value = pickFirst(it, ['invoiceValue', 'Invoice Value', 'Invoice Amount', 'grossAmount', 'dmbtr'], '');
+  const taxAmount = pickFirst(it, ['Tax Amount', 'taxAmount', 'mwsts'], '');
+  const netAmount = pickFirst(it, ['Net Amount', 'netAmount', 'wrbtr'], '');
+  const currency = pickFirst(it, ['Currency', 'currency', 'waers'], '');
+  const status = pickFirst(it, ['paymentStatus', 'Payment Status', 'livStatus', 'LIV Status', 'Invoice Status'], '');
+  const docDate = pickFirst(it, ['invoiceDocDate', 'Doc Date', 'Document Date', 'bldat'], '');
+  const postDate = pickFirst(it, ['invoicePostDate', 'Posting Date', 'budat'], '');
+  const paymentDueOn = pickFirst(it, ['paymentDueOn', 'Payment Due On', 'Payment Due Date', 'paymentDueDate', 'netdt'], '');
+  const clearingDoc = pickFirst(it, ['Clearing Document', 'clearingDocument', 'augbl'], '');
+  const clearingDate = pickFirst(it, ['clearingDate', 'Clearing Date', 'augdt'], '');
   const paidAmount = pickFirst(it, ['Paid Amount', 'paidAmount'], '');
   const invCreatorId = pickFirst(it, ['Invoice Creator ID', 'invCreatorId'], '');
   const invCreatorName = pickFirst(it, ['Invoice Creator', 'invCreatorName'], '');
@@ -551,7 +551,7 @@ function parsePaginationRequest(userQuery) {
     const size = Number(nextMatch[1]);
     return Number.isFinite(size) && size > 0 ? { isNextPage: true, pageSize: size } : null;
   }
-  if (/\b(next|more|continue|show\s+more|another\s+page)\b/.test(text)) {
+  if (/\b(next|continue|show\s+more|another\s+page)\b/.test(text)) {
     return { isNextPage: true, pageSize: PAGE_SIZE_DEFAULT };
   }
   return null;
@@ -973,7 +973,7 @@ function formatSearchCountSummary(totalCount, { docType, paymentStatus, dateFrom
 
 function buildPaginationNote({ totalCount, pageSize, skip } = {}) {
   if (!Number.isFinite(totalCount) || totalCount <= pageSize) return '';
-  const shownStart = skip + 1;
+  const shownStart = Math.max((skip || 0) + 1, 1);
   const shownEnd = Math.min(skip + pageSize, totalCount);
   const remaining = totalCount - shownEnd;
   if (remaining <= 0) return '';
@@ -1011,6 +1011,14 @@ function formatSearchResultsNice(
   if (resp?.resultCount !== null && resp?.resultCount !== undefined) {
     lines.push(joinLine('Result Count', resp.resultCount));
   }
+  const paginationNote = buildPaginationNote({
+    totalCount: resp?.totalCount,
+    pageSize: pageSize || PAGE_SIZE_DEFAULT,
+    skip: skip || 0
+  });
+  if (paginationNote) {
+    lines.push(paginationNote);
+  }
   lines.push('');
 
   if (poItems.length) {
@@ -1040,16 +1048,6 @@ function formatSearchResultsNice(
     } else {
       lines.push('No matching documents were returned for the selected filters.');
     }
-  }
-
-  const paginationNote = buildPaginationNote({
-    totalCount: resp?.totalCount,
-    pageSize: pageSize || PAGE_SIZE_DEFAULT,
-    skip: skip || 0
-  });
-  if (paginationNote) {
-    lines.push('');
-    lines.push(paginationNote);
   }
 
   return lines.join('\n');
