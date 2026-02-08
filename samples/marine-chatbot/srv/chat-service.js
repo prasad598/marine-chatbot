@@ -574,22 +574,17 @@ function formatOverdueReportPayload(resp, filters = {}) {
         : overdueItems.length
   };
 
-  const resolvedFilters = {
-    ...(filters?.purchasingOrg ? { purchasingOrg: filters.purchasingOrg } : {}),
-    ...(filters?.overdueDays !== undefined && filters?.overdueDays !== null ? { overdueDays: filters.overdueDays } : {}),
-    ...(raw?.filters && typeof raw.filters === 'object' ? raw.filters : {}),
-    ...(raw?.currentDate ? { currentDate: raw.currentDate } : {})
-  };
-
   const lines = [];
-  const overdueDaysText =
-    resolvedFilters?.overdueDays !== undefined && resolvedFilters?.overdueDays !== null
-      ? `${resolvedFilters.overdueDays}`
-      : 'N/A';
 
   if (reportType === 'INVOICE_OVERDUE') {
-    lines.push(`Overdue Invoices (more than ${overdueDaysText} days)`);
-    lines.push(joinLine('Total Overdue Invoices', totalsByType[reportType]));
+    const summaryLine = buildListRetrievalSummary({
+      totalCount: totalsByType[reportType],
+      shownCount: overdueItems.length,
+      pageSize: Number.isFinite(resp?.resultCount) ? resp.resultCount : overdueItems.length || PAGE_SIZE_DEFAULT,
+      skip: Number.isFinite(raw?.skip) ? raw.skip : 0,
+      label: 'invoices'
+    });
+    if (summaryLine) lines.push(summaryLine);
     if (raw?.totalAmount !== undefined && raw?.totalAmount !== null) {
       lines.push(joinLine('Total Amount', raw.totalAmount));
     }
@@ -620,8 +615,14 @@ function formatOverdueReportPayload(resp, filters = {}) {
   }
 
   if (reportType === 'PR_OVERDUE') {
-    lines.push(`Overdue Purchase Requisitions (more than ${overdueDaysText} days)`);
-    lines.push(joinLine('Total Overdue PRs', totalsByType[reportType]));
+    const summaryLine = buildListRetrievalSummary({
+      totalCount: totalsByType[reportType],
+      shownCount: overdueItems.length,
+      pageSize: Number.isFinite(resp?.resultCount) ? resp.resultCount : overdueItems.length || PAGE_SIZE_DEFAULT,
+      skip: Number.isFinite(raw?.skip) ? raw.skip : 0,
+      label: 'purchase requisitions'
+    });
+    if (summaryLine) lines.push(summaryLine);
     lines.push('');
 
     if (!overdueItems.length) {
@@ -643,8 +644,14 @@ function formatOverdueReportPayload(resp, filters = {}) {
     return lines.join('\n');
   }
 
-  lines.push(`Overdue Purchase Orders (more than ${overdueDaysText} days)`);
-  lines.push(joinLine('Total Overdue POs', totalsByType[reportType]));
+  const summaryLine = buildListRetrievalSummary({
+    totalCount: totalsByType[reportType],
+    shownCount: overdueItems.length,
+    pageSize: Number.isFinite(resp?.resultCount) ? resp.resultCount : overdueItems.length || PAGE_SIZE_DEFAULT,
+    skip: Number.isFinite(raw?.skip) ? raw.skip : 0,
+    label: 'purchase orders'
+  });
+  if (summaryLine) lines.push(summaryLine);
   lines.push('');
 
   if (!overdueItems.length) {
@@ -1156,6 +1163,7 @@ function prependQuestionContext(userQuery, content) {
 function shouldPrependQuestionContext({ category, isDeterministic }) {
   if (!isDeterministic) return false;
   if (category === 'generic-query') return false;
+  if (category === 'document-search') return false;
   return true;
 }
 
@@ -1175,13 +1183,28 @@ function formatSearchCountSummary(totalCount, { docType, paymentStatus, dateFrom
   return `There ${totalCount === 1 ? 'is' : 'are'} ${totalCount} ${pluralLabel}${paymentSuffix}${dateSuffix}.`;
 }
 
-function buildPaginationNote({ totalCount, pageSize, skip } = {}) {
-  if (!Number.isFinite(totalCount) || totalCount <= pageSize) return '';
-  const shownStart = Math.max((skip || 0) + 1, 1);
-  const shownEnd = Math.min(skip + pageSize, totalCount);
-  const remaining = totalCount - shownEnd;
-  if (remaining <= 0) return '';
-  return `Showing ${shownStart}-${shownEnd} of ${totalCount} records (top ${pageSize}). Let me know if you want the next ${pageSize} records.`;
+function buildListRetrievalSummary({ totalCount, shownCount, pageSize, skip, label } = {}) {
+  if (!Number.isFinite(totalCount)) return '';
+  const safeTotalCount = Math.max(totalCount, 0);
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? pageSize : PAGE_SIZE_DEFAULT;
+  const safeSkip = Number.isFinite(skip) && skip > 0 ? skip : 0;
+  const safeShownCount = Number.isFinite(shownCount) && shownCount >= 0 ? shownCount : Math.min(safePageSize, safeTotalCount);
+  const safeLabel = label || 'records';
+
+  if (safeTotalCount === 0) {
+    return `Total 0 ${safeLabel} found for your search criteria.`;
+  }
+
+  const start = Math.max(safeSkip + 1, 1);
+  const calculatedEnd = safeShownCount > 0 ? start + safeShownCount - 1 : safeSkip + safePageSize;
+  const end = Math.min(calculatedEnd, safeTotalCount);
+  const displayedCount = Math.max(end - start + 1, 0);
+  const base = `Total ${safeTotalCount} ${safeLabel} found for your search criteria, displaying top ${displayedCount} records i.e. ${start}-${end} records.`;
+  const remaining = safeTotalCount - end;
+  if (remaining <= 0) {
+    return `${base} Let me know if you want to refine your search further.`;
+  }
+  return `${base} Let me know if you want to see next ${safePageSize} records or can refine your search further.`;
 }
 
 function formatSearchResultsNice(
@@ -1213,22 +1236,20 @@ function formatSearchResultsNice(
     });
   }
 
-  lines.push('Document Search Results');
-  if (resp?.totalCount !== null && resp?.totalCount !== undefined) {
-    lines.push(joinLine('Total Count', resp.totalCount));
-  }
-  if (resp?.resultCount !== null && resp?.resultCount !== undefined) {
-    lines.push(joinLine('Result Count', resp.resultCount));
-  }
-  const paginationNote = buildPaginationNote({
-    totalCount: resp?.totalCount,
-    pageSize: pageSize || PAGE_SIZE_DEFAULT,
-    skip: skip || 0
+  const resolvedPageSize = pageSize || PAGE_SIZE_DEFAULT;
+  const shownCount = poItems.length + prItems.length + invoiceItems.length;
+  const listSummary = buildListRetrievalSummary({
+    totalCount: Number.isFinite(resp?.totalCount) ? resp.totalCount : shownCount,
+    shownCount,
+    pageSize: resolvedPageSize,
+    skip: skip || 0,
+    label: resolvedDocType === 'INV' ? 'invoices' : resolvedDocType === 'PO' ? 'purchase orders' : resolvedDocType === 'PR' ? 'purchase requisitions' : 'records'
   });
-  if (paginationNote) {
-    lines.push(paginationNote);
+
+  if (listSummary) {
+    lines.push(listSummary);
+    lines.push('');
   }
-  lines.push('');
 
   if (poItems.length) {
     lines.push('Purchase Order Items:');
