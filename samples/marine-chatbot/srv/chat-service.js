@@ -1734,6 +1734,16 @@ module.exports = function () {
       const shouldReuseSearchFilters = !hasIncomingFilters && cachedSearch.filters &&
         (isListFollowUp(user_query) || hasFollowUpHint(user_query));
 
+      if (!category) {
+        if (hasIncomingFilters) {
+          category = 'document-search';
+        } else if (docType || documentNumbers.length) {
+          category = 'document-status';
+        } else {
+          category = 'generic-query';
+        }
+      }
+
       if (shouldReuseSearchFilters) {
         determinationJson = {
           ...determinationJson,
