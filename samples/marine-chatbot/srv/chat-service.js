@@ -58,7 +58,7 @@ If the user asks to search for documents by filters (date ranges, creator, appro
     "prStatus": "RELEASED | PENDING | REJECTED | DELETED",
     "seStatus": "RELEASED | PENDING",
     "saStatus": "ACCEPTED | PENDING",
-    "reportType": "TOP_VENDOR | TOP_PO | SEARCH_DESC | PR_APPROVED | PR_PENDING | INVOICE_AGING | INVOICE_OVERDUE | 3WAY_PENDING | PO_OVERDUE",
+    "reportType": "TOP_VENDOR | TOP_PO | SEARCH_DESC | PR_APPROVED | PR_PENDING | INVOICE_AGING | INVOICE_OVERDUE | PR_OVERDUE | 3WAY_PENDING | PO_OVERDUE",
     "purchasingOrg": "<purchasing organization>",
     "topN": 20,
     "minValue": 1000,
@@ -528,7 +528,78 @@ function normalizePaymentStatus(value, userQuery) {
 function isOverdueReportType(reportType) {
   if (!reportType) return false;
   const normalized = String(reportType).trim().toUpperCase();
-  return ['INVOICE_OVERDUE', 'PO_OVERDUE'].includes(normalized);
+  return ['INVOICE_OVERDUE', 'PR_OVERDUE', 'PO_OVERDUE'].includes(normalized);
+}
+
+function formatOverdueReportPayload(resp, filters = {}) {
+  const reportType = normalizeUpperValue(filters?.reportType || resp?.raw?.reportType);
+  if (!['INVOICE_OVERDUE', 'PR_OVERDUE', 'PO_OVERDUE'].includes(reportType)) {
+    return null;
+  }
+
+  const raw = resp?.raw && typeof resp.raw === 'object' ? resp.raw : {};
+  const fallbackItems = {
+    INVOICE_OVERDUE: Array.isArray(resp?.invoiceItems) ? resp.invoiceItems : [],
+    PR_OVERDUE: Array.isArray(resp?.prItems) ? resp.prItems : [],
+    PO_OVERDUE: Array.isArray(resp?.poItems) ? resp.poItems : []
+  };
+  const overdueArrayMap = {
+    INVOICE_OVERDUE: ['overdueInvoices', 'invoiceItems', 'invoices'],
+    PR_OVERDUE: ['overduePRs', 'overduePurchaseRequisitions', 'prItems', 'purchaseRequisitions'],
+    PO_OVERDUE: ['overduePOs', 'overduePurchaseOrders', 'poItems', 'purchaseOrders']
+  };
+
+  const overdueItems =
+    overdueArrayMap[reportType]
+      .map((key) => raw?.[key])
+      .find((value) => Array.isArray(value)) || fallbackItems[reportType];
+
+  const totalsByType = {
+    INVOICE_OVERDUE: Number.isFinite(raw?.totalOverdue)
+      ? raw.totalOverdue
+      : Number.isFinite(resp?.totalCount)
+        ? resp.totalCount
+        : overdueItems.length,
+    PR_OVERDUE: Number.isFinite(raw?.totalOverdue)
+      ? raw.totalOverdue
+      : Number.isFinite(resp?.totalCount)
+        ? resp.totalCount
+        : overdueItems.length,
+    PO_OVERDUE: Number.isFinite(raw?.totalOverdue)
+      ? raw.totalOverdue
+      : Number.isFinite(resp?.totalCount)
+        ? resp.totalCount
+        : overdueItems.length
+  };
+
+  const responsePayload = {
+    success: resp?.success === true || raw?.success === true,
+    message: raw?.message || resp?.message || 'Success',
+    reportType,
+    filters: {
+      ...(filters?.purchasingOrg ? { purchasingOrg: filters.purchasingOrg } : {}),
+      ...(filters?.overdueDays !== undefined && filters?.overdueDays !== null ? { overdueDays: filters.overdueDays } : {}),
+      ...(raw?.filters && typeof raw.filters === 'object' ? raw.filters : {}),
+      ...(raw?.currentDate ? { currentDate: raw.currentDate } : {})
+    },
+    totalOverdue: totalsByType[reportType]
+  };
+
+  if (reportType === 'INVOICE_OVERDUE') {
+    responsePayload.totalAmount = raw?.totalAmount;
+    responsePayload.currency = raw?.currency;
+    responsePayload.overdueInvoices = overdueItems;
+  }
+
+  if (reportType === 'PR_OVERDUE') {
+    responsePayload.overduePRs = overdueItems;
+  }
+
+  if (reportType === 'PO_OVERDUE') {
+    responsePayload.overduePOs = overdueItems;
+  }
+
+  return JSON.stringify(responsePayload, null, 2);
 }
 
 function normalizeDocNumbers(rawNumbers) {
@@ -994,6 +1065,11 @@ function formatSearchResultsNice(
   const resolvedDateFrom = dateFrom || filters?.dateFrom;
   const resolvedDateTo = dateTo || filters?.dateTo;
   const hasLineItems = poItems.length || prItems.length || invoiceItems.length;
+  const overdueResponse = formatOverdueReportPayload(resp, filters);
+
+  if (overdueResponse) {
+    return overdueResponse;
+  }
 
   if (countRequested && !hasLineItems && resp?.totalCount !== null && resp?.totalCount !== undefined) {
     return formatSearchCountSummary(resp.totalCount, {
