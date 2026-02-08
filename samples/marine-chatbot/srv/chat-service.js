@@ -708,6 +708,54 @@ function hasSearchFilters(filters = {}) {
   );
 }
 
+function extractSearchFilters(determinationJson = {}) {
+  if (determinationJson?.filters && typeof determinationJson.filters === 'object') {
+    return determinationJson.filters;
+  }
+
+  const allowedFilterKeys = [
+    'purchaseOrder',
+    'purchaseRequisition',
+    'invoice',
+    'vendor',
+    'dateFrom',
+    'dateTo',
+    'approveFromDate',
+    'approveToDate',
+    'dueFromDate',
+    'dueToDate',
+    'docType',
+    'creator',
+    'approver',
+    'paymentStatus',
+    'costCenter',
+    'wbs',
+    'glAccount',
+    'poStatus',
+    'prStatus',
+    'seStatus',
+    'saStatus',
+    'reportType',
+    'purchasingOrg',
+    'topN',
+    'minValue',
+    'description',
+    'overdueDays',
+    'top',
+    'skip',
+    'count'
+  ];
+
+  const flattenedFilters = {};
+  for (const key of allowedFilterKeys) {
+    if (determinationJson?.[key] !== undefined) {
+      flattenedFilters[key] = determinationJson[key];
+    }
+  }
+
+  return flattenedFilters;
+}
+
 function getCachedConversationContext(conversationId) {
   if (!conversationId) return { docType: '', documentNumbers: [] };
   const cached = conversationContextCache.get(conversationId);
@@ -1300,7 +1348,7 @@ const categoryHandlers = {
   },
 
   'document-search': async ({ determinationJson, user_query, userId, conversationId }) => {
-    const rawFilters = determinationJson?.filters || {};
+    const rawFilters = extractSearchFilters(determinationJson);
     const {
       filters,
       countRequested,
@@ -1665,7 +1713,8 @@ module.exports = function () {
           determinationJson?.referenceNumber
       );
 
-      const hasIncomingFilters = hasSearchFilters(determinationJson?.filters || {});
+      const incomingFilters = extractSearchFilters(determinationJson);
+      const hasIncomingFilters = hasSearchFilters(incomingFilters);
       const cachedSearch = getCachedSearchFilters(conversationId);
       const shouldReuseSearchFilters = !hasIncomingFilters && cachedSearch.filters &&
         (isListFollowUp(user_query) || hasFollowUpHint(user_query));
@@ -1679,6 +1728,11 @@ module.exports = function () {
           }
         };
         category = 'document-search';
+      } else if (hasIncomingFilters) {
+        determinationJson = {
+          ...determinationJson,
+          filters: incomingFilters
+        };
       }
 
       if (!docType || documentNumbers.length === 0) {
