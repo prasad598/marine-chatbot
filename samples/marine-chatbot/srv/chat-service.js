@@ -1153,6 +1153,12 @@ function prependQuestionContext(userQuery, content) {
   return `Here are the results for your question: "${normalizedQuestion}"\n${normalizedContent}`;
 }
 
+function shouldPrependQuestionContext({ category, isDeterministic }) {
+  if (!isDeterministic) return false;
+  if (category === 'generic-query') return false;
+  return true;
+}
+
 function formatSearchCountSummary(totalCount, { docType, paymentStatus, dateFrom, dateTo } = {}) {
   const label = formatDocTypeLabel(docType);
   const pluralLabel = totalCount === 1 ? label : `${label}s`;
@@ -1840,7 +1846,9 @@ module.exports = function () {
 
       // 3) If deterministic → no RAG call
       if (deterministicResponse) {
-        const deterministicContent = prependQuestionContext(user_query, deterministicResponse.content);
+        const deterministicContent = shouldPrependQuestionContext({ category, isDeterministic: true })
+          ? prependQuestionContext(user_query, deterministicResponse.content)
+          : deterministicResponse.content;
         const responseTimestamp = new Date().toISOString();
 
         await logUsageToAiEngine(req, {
@@ -1926,7 +1934,9 @@ module.exports = function () {
       }
 
       const responseTimestamp = new Date().toISOString();
-      const completionContent = prependQuestionContext(user_query, completionObj?.content);
+      const completionContent = shouldPrependQuestionContext({ category, isDeterministic: false })
+        ? prependQuestionContext(user_query, completionObj?.content)
+        : completionObj?.content;
 
       await logUsageToAiEngine(req, {
         category,
