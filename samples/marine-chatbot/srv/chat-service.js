@@ -1136,6 +1136,21 @@ function formatDateRange(dateFrom, dateTo) {
   return '';
 }
 
+function prependQuestionContext(userQuery, content) {
+  const normalizedQuestion = typeof userQuery === 'string' ? userQuery.trim() : '';
+  const normalizedContent = typeof content === 'string' ? content.trim() : '';
+
+  if (!normalizedContent || !normalizedQuestion) {
+    return normalizedContent || content;
+  }
+
+  if (normalizedContent.startsWith('Here are the results for your question:')) {
+    return normalizedContent;
+  }
+
+  return `Here are the results for your question: "${normalizedQuestion}"\n${normalizedContent}`;
+}
+
 function formatSearchCountSummary(totalCount, { docType, paymentStatus, dateFrom, dateTo } = {}) {
   const label = formatDocTypeLabel(docType);
   const pluralLabel = totalCount === 1 ? label : `${label}s`;
@@ -1813,6 +1828,7 @@ module.exports = function () {
 
       // 3) If deterministic → no RAG call
       if (deterministicResponse) {
+        const deterministicContent = prependQuestionContext(user_query, deterministicResponse.content);
         const responseTimestamp = new Date().toISOString();
 
         await logUsageToAiEngine(req, {
@@ -1829,7 +1845,7 @@ module.exports = function () {
             await handleMemoryAfterRagCall(
               conversationId,
               responseTimestamp,
-              deterministicResponse,
+              { ...deterministicResponse, content: deterministicContent },
               Message,
               Conversation
             );
@@ -1840,7 +1856,7 @@ module.exports = function () {
 
         return {
           role: deterministicResponse.role,
-          content: deterministicResponse.content,
+          content: deterministicContent,
           messageTime: responseTimestamp,
           messageId: messageId || null,
           additionalContents: JSON.stringify(deterministicResponse.additionalContents || [])
@@ -1898,6 +1914,7 @@ module.exports = function () {
       }
 
       const responseTimestamp = new Date().toISOString();
+      const completionContent = prependQuestionContext(user_query, completionObj?.content);
 
       await logUsageToAiEngine(req, {
         category,
@@ -1910,13 +1927,13 @@ module.exports = function () {
 
       if (shouldPersistMemory) {
         try {
-          await handleMemoryAfterRagCall(
-            conversationId,
-            responseTimestamp,
-            completionObj,
-            Message,
-            Conversation
-          );
+            await handleMemoryAfterRagCall(
+              conversationId,
+              responseTimestamp,
+              { ...completionObj, content: completionContent },
+              Message,
+              Conversation
+            );
         } catch (error) {
           console.warn('Unable to persist assistant response for memory.', error);
         }
@@ -1924,7 +1941,7 @@ module.exports = function () {
 
       return {
         role: completionObj.role,
-        content: completionObj.content,
+        content: completionContent,
         messageTime: responseTimestamp,
         messageId: messageId || null,
         additionalContents: JSON.stringify(additionalContentsArr)
