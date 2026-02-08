@@ -74,7 +74,7 @@ Payment status guidance for search filters:
 - If the user mentions payment completed/paid, set paymentStatus to "PAID".
 - If the user mentions payment due/outstanding/not paid, set paymentStatus to "Not yet Paid".
 - Use the exact value strings above when setting paymentStatus.
-- For overdue report requests (INVOICE_OVERDUE or PO_OVERDUE), do not set paymentStatus; use reportType with overdueDays only.
+- For overdue report requests (INVOICE_OVERDUE, PR_OVERDUE, or PO_OVERDUE), do not set paymentStatus; use reportType with overdueDays only.
 
 Examples for search filters:
 - "How many POs approved between 01/08/2025 to 31/12/2025" ->
@@ -85,6 +85,8 @@ Examples for search filters:
   { "reportType": "INVOICE_OVERDUE", "overdueDays": 90 }
 - "List all POs overdue more than 90 days" ->
   { "reportType": "PO_OVERDUE", "overdueDays": 90, "docType": "PO" }
+- "List all PRs overdue for payment by more than 90 days" ->
+  { "reportType": "PR_OVERDUE", "overdueDays": 90, "docType": "PR" }
 - "List POs issued between 25.01.2025 and 28.01.2025" ->
   { "docType": "PO", "dateFrom": "25.01.2025", "dateTo": "28.01.2025" }
 - "POs approved between 28.01.2026 and 28.02.2026" ->
@@ -104,7 +106,7 @@ Query formation guidance:
 - Use DateFrom/DateTo for issuance dates, ApproveFromDate/ApproveToDate for approval dates, DueFromDate/DueToDate for due dates.
 - Use POStatus/PRStatus for approval/release status, SEStatus for service entry status, SAStatus for service acceptance status.
 - Use MinValue for value thresholds and TopN for top-N reports.
-- Use ReportType for special reports (TOP_VENDOR, TOP_PO, SEARCH_DESC, PR_APPROVED, PR_PENDING, INVOICE_AGING, INVOICE_OVERDUE, 3WAY_PENDING, PO_OVERDUE).
+- Use ReportType for special reports (TOP_VENDOR, TOP_PO, SEARCH_DESC, PR_APPROVED, PR_PENDING, INVOICE_AGING, INVOICE_OVERDUE, PR_OVERDUE, 3WAY_PENDING, PO_OVERDUE).
 - For overdue reports, use ReportType + OverdueDays and do not include PaymentStatus.
 - Use top/skip for pagination and count=true for count-only requests.
 
