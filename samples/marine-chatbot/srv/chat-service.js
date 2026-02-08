@@ -572,34 +572,96 @@ function formatOverdueReportPayload(resp, filters = {}) {
         : overdueItems.length
   };
 
-  const responsePayload = {
-    success: resp?.success === true || raw?.success === true,
-    message: raw?.message || resp?.message || 'Success',
-    reportType,
-    filters: {
-      ...(filters?.purchasingOrg ? { purchasingOrg: filters.purchasingOrg } : {}),
-      ...(filters?.overdueDays !== undefined && filters?.overdueDays !== null ? { overdueDays: filters.overdueDays } : {}),
-      ...(raw?.filters && typeof raw.filters === 'object' ? raw.filters : {}),
-      ...(raw?.currentDate ? { currentDate: raw.currentDate } : {})
-    },
-    totalOverdue: totalsByType[reportType]
+  const resolvedFilters = {
+    ...(filters?.purchasingOrg ? { purchasingOrg: filters.purchasingOrg } : {}),
+    ...(filters?.overdueDays !== undefined && filters?.overdueDays !== null ? { overdueDays: filters.overdueDays } : {}),
+    ...(raw?.filters && typeof raw.filters === 'object' ? raw.filters : {}),
+    ...(raw?.currentDate ? { currentDate: raw.currentDate } : {})
   };
 
+  const lines = [];
+  const overdueDaysText =
+    resolvedFilters?.overdueDays !== undefined && resolvedFilters?.overdueDays !== null
+      ? `${resolvedFilters.overdueDays}`
+      : 'N/A';
+
   if (reportType === 'INVOICE_OVERDUE') {
-    responsePayload.totalAmount = raw?.totalAmount;
-    responsePayload.currency = raw?.currency;
-    responsePayload.overdueInvoices = overdueItems;
+    lines.push(`Overdue Invoices (more than ${overdueDaysText} days)`);
+    lines.push(joinLine('Total Overdue Invoices', totalsByType[reportType]));
+    if (raw?.totalAmount !== undefined && raw?.totalAmount !== null) {
+      lines.push(joinLine('Total Amount', raw.totalAmount));
+    }
+    if (raw?.currency) {
+      lines.push(joinLine('Currency', raw.currency));
+    }
+    lines.push('');
+
+    if (!overdueItems.length) {
+      lines.push('No overdue invoices found for the selected filters.');
+      return lines.join('\n');
+    }
+
+    lines.push('Invoice Items:');
+    overdueItems.forEach((it, idx) => {
+      formatInvoiceItemDetails(lines, it, idx);
+      const dueDate = pickFirst(it, ['dueDate', 'paymentDueOn', 'Payment Due On', 'Payment Due Date'], '');
+      const daysOverdue = pickFirst(it, ['daysOverdue', 'overdueDays'], '');
+      if (dueDate || daysOverdue) {
+        if (lines[lines.length - 1] === '') lines.pop();
+        if (dueDate) lines.push(joinLine('Due Date', dueDate));
+        if (daysOverdue) lines.push(joinLine('Days Overdue', daysOverdue));
+        lines.push('');
+      }
+    });
+
+    return lines.join('\n');
   }
 
   if (reportType === 'PR_OVERDUE') {
-    responsePayload.overduePRs = overdueItems;
+    lines.push(`Overdue Purchase Requisitions (more than ${overdueDaysText} days)`);
+    lines.push(joinLine('Total Overdue PRs', totalsByType[reportType]));
+    lines.push('');
+
+    if (!overdueItems.length) {
+      lines.push('No overdue purchase requisitions found for the selected filters.');
+      return lines.join('\n');
+    }
+
+    lines.push('Purchase Requisition Items:');
+    overdueItems.forEach((it, idx) => {
+      formatPrItemDetails(lines, it, idx);
+      const daysOverdue = pickFirst(it, ['daysOverdue', 'overdueDays'], '');
+      if (daysOverdue) {
+        if (lines[lines.length - 1] === '') lines.pop();
+        lines.push(joinLine('Days Overdue', daysOverdue));
+        lines.push('');
+      }
+    });
+
+    return lines.join('\n');
   }
 
-  if (reportType === 'PO_OVERDUE') {
-    responsePayload.overduePOs = overdueItems;
+  lines.push(`Overdue Purchase Orders (more than ${overdueDaysText} days)`);
+  lines.push(joinLine('Total Overdue POs', totalsByType[reportType]));
+  lines.push('');
+
+  if (!overdueItems.length) {
+    lines.push('No overdue purchase orders found for the selected filters.');
+    return lines.join('\n');
   }
 
-  return JSON.stringify(responsePayload, null, 2);
+  lines.push('Purchase Order Items:');
+  overdueItems.forEach((it, idx) => {
+    formatPoItemDetails(lines, it, idx);
+    const daysOverdue = pickFirst(it, ['daysOverdue', 'overdueDays'], '');
+    if (daysOverdue) {
+      if (lines[lines.length - 1] === '') lines.pop();
+      lines.push(joinLine('Days Overdue', daysOverdue));
+      lines.push('');
+    }
+  });
+
+  return lines.join('\n');
 }
 
 function normalizeDocNumbers(rawNumbers) {
