@@ -607,6 +607,58 @@ function normalizeNumber(value) {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
+function formatDateAsDotted(day) {
+  const date = day instanceof Date ? day : new Date(day);
+  if (Number.isNaN(date.getTime())) return '';
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(date.getFullYear());
+  return `${dd}.${mm}.${yyyy}`;
+}
+
+function deriveRelativeIssueDateRange(userQuery) {
+  if (!userQuery) return null;
+  const query = `${userQuery}`.toLowerCase();
+  const now = new Date();
+
+  if (/\b(this|current)\s+year\b/.test(query)) {
+    const year = now.getFullYear();
+    return {
+      dateFrom: `01.01.${year}`,
+      dateTo: `31.12.${year}`
+    };
+  }
+
+  if (/\b(last|previous)\s+year\b/.test(query)) {
+    const year = now.getFullYear() - 1;
+    return {
+      dateFrom: `01.01.${year}`,
+      dateTo: `31.12.${year}`
+    };
+  }
+
+  if (/\b(this|current)\s+quarter\b/.test(query)) {
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+    const fromDate = new Date(now.getFullYear(), quarterStartMonth, 1);
+    const toDate = new Date(now.getFullYear(), quarterStartMonth + 3, 0);
+    return {
+      dateFrom: formatDateAsDotted(fromDate),
+      dateTo: formatDateAsDotted(toDate)
+    };
+  }
+
+  if (/\b(this|current)\s+month\b/.test(query)) {
+    const fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return {
+      dateFrom: formatDateAsDotted(fromDate),
+      dateTo: formatDateAsDotted(toDate)
+    };
+  }
+
+  return null;
+}
+
 function normalizeUpperValue(value) {
   if (value === undefined || value === null || value === '') return undefined;
   return String(value).trim().toUpperCase();
@@ -1406,6 +1458,12 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
     skip,
     count: countRequested
   };
+
+  const relativeIssueDateRange = deriveRelativeIssueDateRange(userQuery);
+  if (relativeIssueDateRange) {
+    normalizedFilters.dateFrom = relativeIssueDateRange.dateFrom;
+    normalizedFilters.dateTo = relativeIssueDateRange.dateTo;
+  }
 
   return {
     filters: normalizedFilters,
