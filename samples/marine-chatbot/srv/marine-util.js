@@ -212,6 +212,7 @@ async function getDocumentStatus({ docType, numbers }) {
 
 async function searchDocuments(filters = {}) {
   const normalizedReportType = filters.reportType ? String(filters.reportType).trim().toUpperCase() : '';
+  const reportTypeAsDocType = ['PR_PENDING'].includes(normalizedReportType) ? normalizedReportType : undefined;
   const isTopReport = normalizedReportType.startsWith('TOP_');
   const isCountRequest = isTopReport ? false : Boolean(filters.count);
   const isOverdueReport =
@@ -229,7 +230,7 @@ async function searchDocuments(filters = {}) {
       Vendor: filters.vendor,
       DateFrom: filters.dateFrom,
       DateTo: filters.dateTo,
-      DocType: filters.docType,
+      DocType: reportTypeAsDocType || filters.docType,
       Creator: filters.creator,
       Approver: filters.approver,
       PaymentStatus: isOverdueReport ? undefined : filters.paymentStatus,
@@ -244,7 +245,7 @@ async function searchDocuments(filters = {}) {
       ApproveToDate: filters.approveToDate,
       DueFromDate: filters.dueFromDate,
       DueToDate: filters.dueToDate,
-      ReportType: filters.reportType,
+      ReportType: reportTypeAsDocType ? undefined : filters.reportType,
       PurchasingOrg: filters.purchasingOrg,
       TopN: filters.topN,
       MinValue: filters.minValue,
