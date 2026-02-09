@@ -23,7 +23,7 @@ If the user requests the status of a purchase order, purchase requisition, or in
 {
   "category": "document-status",
   "docType": "PO | PR | INV",
-  "documentNumbers": ["<document numbers from the user, digits only>"]
+  "documentNumbers": ["<document numbers exactly as provided by user (preserve hyphens/special characters)>"]
 }
 
 If the user requests the status of multiple documents of the same type, include all numbers in the array:
@@ -1029,6 +1029,23 @@ function normalizeDocNumbers(rawNumbers) {
   return splitTokens(rawNumbers);
 }
 
+function recoverCombinedDocumentNumber(parts, userQuery) {
+  if (!Array.isArray(parts) || parts.length < 2 || !userQuery) return [];
+
+  const normalizedParts = parts
+    .map((part) => `${part}`.trim())
+    .filter((part) => part.length > 0);
+
+  if (normalizedParts.length < 2) return [];
+
+  const escapedParts = normalizedParts.map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const sequenceRegex = new RegExp(escapedParts.join('\\s*[-_/.,:;#]\\s*'), 'i');
+  const sequenceMatch = `${userQuery}`.match(sequenceRegex);
+
+  if (!sequenceMatch?.[0]) return [];
+  return [sequenceMatch[0].replace(/\s+/g, '')];
+}
+
 function parsePaginationRequest(userQuery) {
   if (!userQuery) return null;
   const text = `${userQuery}`.toLowerCase();
@@ -1722,14 +1739,21 @@ const categoryHandlers = {
     };
   },
 
-  'document-status': async ({ determinationJson }) => {
+  'document-status': async ({ determinationJson, user_query }) => {
     const docType = normalizeDocType(determinationJson?.docType);
-    const documentNumbers = normalizeDocNumbers(
+    let documentNumbers = normalizeDocNumbers(
       determinationJson?.documentNumbers ||
         determinationJson?.purchaseOrder ||
         determinationJson?.purchaseRequisition ||
         determinationJson?.invoice
     );
+
+    if (docType === 'INV' && documentNumbers.length > 1) {
+      const recoveredNumbers = recoverCombinedDocumentNumber(documentNumbers, user_query);
+      if (recoveredNumbers.length) {
+        documentNumbers = recoveredNumbers;
+      }
+    }
 
     if (!docType && documentNumbers.length) {
       return {
