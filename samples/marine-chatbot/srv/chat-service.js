@@ -1013,19 +1013,14 @@ function formatThreeWayPendingReportPayload(resp, filters = {}) {
     : Array.isArray(raw?.poItems)
       ? raw.poItems
       : [];
+  const topItems = pendingItems.slice(0, 20);
+  const totalPendingCount = Number.isFinite(summary?.totalPending) ? summary.totalPending : pendingItems.length;
 
   const lines = [];
   lines.push('LIV Approval Pending (3-Way Match) Report:');
-  lines.push(joinLine('Success', raw?.success));
-  lines.push(joinLine('Message', raw?.message));
-  lines.push(joinLine('Report Type', raw?.reportType || reportType));
-  lines.push(joinLine('Description', raw?.description));
-  lines.push('');
-
-  lines.push('Filters:');
-  lines.push(`- ${joinLine('Purchasing Org', reportFilters?.purchasingOrg || filters?.purchasingOrg)}`);
-  lines.push(`- ${joinLine('Date From', reportFilters?.dateFrom || filters?.dateFrom)}`);
-  lines.push(`- ${joinLine('Date To', reportFilters?.dateTo || filters?.dateTo)}`);
+  lines.push(joinLine('Total Pending Items', totalPendingCount));
+  lines.push(joinLine('Showing Top Items', Math.min(20, pendingItems.length)));
+  lines.push(joinLine('Purchasing Org', reportFilters?.purchasingOrg || filters?.purchasingOrg));
   lines.push('');
 
   lines.push('Summary:');
@@ -1040,7 +1035,7 @@ function formatThreeWayPendingReportPayload(resp, filters = {}) {
   }
 
   lines.push('Pending PO Items:');
-  pendingItems.forEach((it, idx) => {
+  topItems.forEach((it, idx) => {
     lines.push(`${idx + 1}.`);
     lines.push(joinLine('PO Number', pickFirst(it, ['poNumber'])));
     lines.push(joinLine('PO Item', pickFirst(it, ['poItem'])));
@@ -1076,6 +1071,9 @@ function formatThreeWayPendingReportPayload(resp, filters = {}) {
     lines.push(`- ${joinLine('Invoice Number', invoiceStatus?.invoiceNumber)}`);
     lines.push(`- ${joinLine('Invoice Date', invoiceStatus?.invoiceDate)}`);
     lines.push(`- ${joinLine('Invoice Value', invoiceStatus?.invoiceValue)}`);
+    appendAdditionalFields(lines, grStatus, new Set(['completed', 'grNumber', 'grDate', 'grQuantity', 'grValue']));
+    appendAdditionalFields(lines, seStatus, new Set(['completed', 'seNumber', 'seDate', 'seValue', 'seAccepted']));
+    appendAdditionalFields(lines, invoiceStatus, new Set(['received', 'invoiceNumber', 'invoiceDate', 'invoiceValue']));
     appendAdditionalFields(lines, it, new Set([
       'poNumber', 'poItem', 'poDate', 'vendorCode', 'vendorName', 'description', 'poValue', 'currency',
       'matchStatus', 'pendingDays', 'variance', 'grStatus', 'seStatus', 'invoiceStatus'
@@ -1233,6 +1231,10 @@ function inferSearchFiltersFromQuery(userQuery = '') {
     inferredFilters.reportType = 'INVOICE_OVERDUE';
     inferredFilters.docType = 'INV';
     inferredFilters.topN = 20;
+  }
+
+  if (/\b(3\s*[- ]?way|three\s*[- ]?way|liv\s+approval)\b/.test(query) && /\b(pending|approval)\b/.test(query)) {
+    inferredFilters.reportType = '3WAY_PENDING';
   }
 
   return inferredFilters;
@@ -2021,6 +2023,20 @@ const categoryHandlers = {
       };
     }
 
+    if (normalizeUpperValue(filters?.reportType) === '3WAY_PENDING' && !filters?.purchasingOrg) {
+      updateCachedSearchFilters(conversationId, {
+        ...filters,
+        reportType: '3WAY_PENDING'
+      });
+      return {
+        deterministic: {
+          role: 'assistant',
+          content: 'Please provide the Purchasing Organization to fetch LIV approval pending PO items for 3-way matched records.',
+          additionalContents: []
+        }
+      };
+    }
+
     const shouldFetchCount = !countRequested && !skipCountForSmallTop;
 
     const countResponse =
@@ -2361,8 +2377,12 @@ module.exports = function () {
       };
       const hasIncomingFilters = hasSearchFilters(mergedIncomingFilters);
       const cachedSearch = getCachedSearchFilters(conversationId);
+      const isPurchasingOrgReply = /^\s*\d{3,6}\s*$/.test(`${user_query || ''}`);
+      const pendingThreeWayWithoutOrg =
+        normalizeUpperValue(cachedSearch.filters?.reportType) === '3WAY_PENDING' &&
+        !cachedSearch.filters?.purchasingOrg;
       const shouldReuseSearchFilters = !hasIncomingFilters && cachedSearch.filters &&
-        (isListFollowUp(user_query) || hasFollowUpHint(user_query));
+        (isListFollowUp(user_query) || hasFollowUpHint(user_query) || (pendingThreeWayWithoutOrg && isPurchasingOrgReply));
 
       if (!category) {
         if (hasIncomingFilters) {
@@ -2379,6 +2399,7 @@ module.exports = function () {
           ...determinationJson,
           filters: {
             ...cachedSearch.filters,
+            ...(pendingThreeWayWithoutOrg && isPurchasingOrgReply ? { purchasingOrg: `${user_query}`.trim() } : {}),
             count: false
           }
         };

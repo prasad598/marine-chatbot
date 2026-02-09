@@ -217,38 +217,43 @@ async function searchDocuments(filters = {}) {
   const isOverdueReport =
     normalizedReportType &&
     ['INVOICE_OVERDUE', 'PR_OVERDUE', 'PO_OVERDUE'].includes(normalizedReportType);
-  const query = buildQueryParams({
-    PurchaseOrder: filters.purchaseOrder,
-    PurchaseRequisition: filters.purchaseRequisition,
-    Invoice: filters.invoice,
-    Vendor: filters.vendor,
-    DateFrom: filters.dateFrom,
-    DateTo: filters.dateTo,
-    DocType: filters.docType,
-    Creator: filters.creator,
-    Approver: filters.approver,
-    PaymentStatus: isOverdueReport ? undefined : filters.paymentStatus,
-    CostCenter: filters.costCenter,
-    WBS: filters.wbs,
-    GLAccount: filters.glAccount,
-    POStatus: filters.poStatus,
-    PRStatus: filters.prStatus,
-    SEStatus: filters.seStatus,
-    SAStatus: filters.saStatus,
-    ApproveFromDate: filters.approveFromDate,
-    ApproveToDate: filters.approveToDate,
-    DueFromDate: filters.dueFromDate,
-    DueToDate: filters.dueToDate,
-    ReportType: filters.reportType,
-    PurchasingOrg: filters.purchasingOrg,
-    TopN: filters.topN,
-    MinValue: filters.minValue,
-    Description: filters.description,
-    OverdueDays: filters.overdueDays,
-    top: isCountRequest ? undefined : filters.top,
-    skip: isCountRequest ? undefined : filters.skip,
-    count: isCountRequest ? 'true' : undefined
-  });
+  const query = normalizedReportType === '3WAY_PENDING'
+    ? buildQueryParams({
+      DocType: '3WAY_PENDING',
+      PurchasingOrg: filters.purchasingOrg
+    })
+    : buildQueryParams({
+      PurchaseOrder: filters.purchaseOrder,
+      PurchaseRequisition: filters.purchaseRequisition,
+      Invoice: filters.invoice,
+      Vendor: filters.vendor,
+      DateFrom: filters.dateFrom,
+      DateTo: filters.dateTo,
+      DocType: filters.docType,
+      Creator: filters.creator,
+      Approver: filters.approver,
+      PaymentStatus: isOverdueReport ? undefined : filters.paymentStatus,
+      CostCenter: filters.costCenter,
+      WBS: filters.wbs,
+      GLAccount: filters.glAccount,
+      POStatus: filters.poStatus,
+      PRStatus: filters.prStatus,
+      SEStatus: filters.seStatus,
+      SAStatus: filters.saStatus,
+      ApproveFromDate: filters.approveFromDate,
+      ApproveToDate: filters.approveToDate,
+      DueFromDate: filters.dueFromDate,
+      DueToDate: filters.dueToDate,
+      ReportType: filters.reportType,
+      PurchasingOrg: filters.purchasingOrg,
+      TopN: filters.topN,
+      MinValue: filters.minValue,
+      Description: filters.description,
+      OverdueDays: filters.overdueDays,
+      top: isCountRequest ? undefined : filters.top,
+      skip: isCountRequest ? undefined : filters.skip,
+      count: isCountRequest ? 'true' : undefined
+    });
 
   const url = `${STATUS_PATH}?${query}`;
   console.log('[MARINE] Search request', {
