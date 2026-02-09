@@ -673,6 +673,65 @@ function formatOverdueReportPayload(resp, filters = {}) {
   return lines.join('\n');
 }
 
+
+function formatTopVendorReportPayload(resp, filters = {}) {
+  const reportType = normalizeUpperValue(filters?.reportType || resp?.raw?.reportType);
+  if (reportType !== 'TOP_VENDOR') return null;
+
+  const raw = resp?.raw && typeof resp.raw === 'object' ? resp.raw : {};
+  const vendorItems = Array.isArray(raw?.data)
+    ? raw.data
+    : Array.isArray(raw?.topVendors)
+      ? raw.topVendors
+      : Array.isArray(raw?.vendors)
+        ? raw.vendors
+        : [];
+
+  const requestedTopN = normalizeNumber(filters?.topN) || normalizeNumber(raw?.filters?.topN) || vendorItems.length;
+  const lines = [];
+  lines.push(`Displaying top ${requestedTopN} vendors.`);
+  lines.push('');
+  lines.push(joinLine('Success', raw?.success));
+  lines.push(joinLine('Message', raw?.message));
+  lines.push(joinLine('Report Type', raw?.reportType || reportType));
+  lines.push(joinLine('Description', raw?.description));
+
+  const reportFilters = raw?.filters && typeof raw.filters === 'object' ? raw.filters : {};
+  lines.push('Filters:');
+  lines.push(`- ${joinLine('Purchasing Org', reportFilters?.purchasingOrg || filters?.purchasingOrg)}`);
+  lines.push(`- ${joinLine('Date From', reportFilters?.dateFrom || filters?.dateFrom)}`);
+  lines.push(`- ${joinLine('Date To', reportFilters?.dateTo || filters?.dateTo)}`);
+  lines.push(`- ${joinLine('Top N', reportFilters?.topN || filters?.topN || requestedTopN)}`);
+  lines.push(`- ${joinLine('Skip', reportFilters?.skip)}`);
+  lines.push(`- ${joinLine('Top', reportFilters?.top)}`);
+  lines.push(joinLine('Total Records', raw?.totalRecords));
+  lines.push('');
+
+  if (!vendorItems.length) {
+    lines.push('No vendor records were returned for the selected filters.');
+    return lines.join('\n');
+  }
+
+  lines.push('Top Vendor Results:');
+  vendorItems.forEach((it, idx) => {
+    lines.push(`${idx + 1}.`);
+    lines.push(joinLine('Rank', pickFirst(it, ['rank'])));
+    lines.push(joinLine('Vendor Code', pickFirst(it, ['vendorCode'])));
+    lines.push(joinLine('Vendor Name', pickFirst(it, ['vendorName'])));
+    lines.push(joinLine('PO Number', pickFirst(it, ['poNumber'])));
+    lines.push(joinLine('Net Value', pickFirst(it, ['netValue'])));
+    lines.push(joinLine('PR Number', pickFirst(it, ['prNumber'])));
+    lines.push(joinLine('PR Item', pickFirst(it, ['prItem'])));
+    lines.push(joinLine('Delivery Completed', pickFirst(it, ['deliveryCompleted'])));
+    lines.push(joinLine('Approval Status', pickFirst(it, ['approvalStatus'])));
+    lines.push(joinLine('PO Creation Date', pickFirst(it, ['poCreationDate'])));
+    lines.push(joinLine('Currency', pickFirst(it, ['currency'])));
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
 function normalizeDocNumbers(rawNumbers) {
   if (!rawNumbers) return [];
   const normalizeToken = (value) =>
@@ -831,7 +890,6 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
   const docType = normalizeDocType(filters?.docType);
   const creator = normalizeUserFilter(filters?.creator, userId);
   const approver = normalizeUserFilter(filters?.approver, userId);
-  const countRequested = normalizeCountFlag(filters?.count);
   const top = normalizeNumber(filters?.top);
   const skip = normalizeNumber(filters?.skip);
   const topN = normalizeNumber(filters?.topN);
@@ -845,6 +903,7 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
   const paymentStatus = isOverdueReportType(reportType)
     ? undefined
     : normalizePaymentStatus(filters?.paymentStatus, userQuery);
+  const countRequested = reportType === 'TOP_VENDOR' ? false : normalizeCountFlag(filters?.count);
 
   const normalizedFilters = {
     ...filters,
@@ -1235,6 +1294,11 @@ function formatSearchResultsNice(
 
   if (overdueResponse) {
     return overdueResponse;
+  }
+
+  const topVendorResponse = formatTopVendorReportPayload(resp, filters);
+  if (topVendorResponse) {
+    return topVendorResponse;
   }
 
   if (countRequested && !hasLineItems && resp?.totalCount !== null && resp?.totalCount !== undefined) {

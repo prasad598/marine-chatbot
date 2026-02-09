@@ -211,10 +211,12 @@ async function getDocumentStatus({ docType, numbers }) {
 }
 
 async function searchDocuments(filters = {}) {
-  const isCountRequest = Boolean(filters.count);
+  const normalizedReportType = filters.reportType ? String(filters.reportType).trim().toUpperCase() : '';
+  const isTopVendorReport = normalizedReportType === 'TOP_VENDOR';
+  const isCountRequest = isTopVendorReport ? false : Boolean(filters.count);
   const isOverdueReport =
-    filters.reportType &&
-    ['INVOICE_OVERDUE', 'PR_OVERDUE', 'PO_OVERDUE'].includes(String(filters.reportType).trim().toUpperCase());
+    normalizedReportType &&
+    ['INVOICE_OVERDUE', 'PR_OVERDUE', 'PO_OVERDUE'].includes(normalizedReportType);
   const query = buildQueryParams({
     PurchaseOrder: filters.purchaseOrder,
     PurchaseRequisition: filters.purchaseRequisition,
