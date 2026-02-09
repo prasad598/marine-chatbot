@@ -1813,6 +1813,39 @@ function formatSearchResultsNice(
   return lines.join('\n');
 }
 
+function hasReportSpecificData(resp = {}) {
+  const raw = resp?.raw && typeof resp.raw === 'object' ? resp.raw : {};
+  const reportType = normalizeUpperValue(raw?.reportType);
+
+  if (!reportType) return false;
+
+  if (reportType === 'TOP_PO') {
+    return (
+      (Array.isArray(raw?.topPOs) && raw.topPOs.length > 0) ||
+      (Array.isArray(raw?.purchaseOrders) && raw.purchaseOrders.length > 0) ||
+      (Array.isArray(raw?.poItems) && raw.poItems.length > 0)
+    );
+  }
+
+  if (reportType === 'TOP_VENDOR') {
+    return (
+      (Array.isArray(raw?.topVendors) && raw.topVendors.length > 0) ||
+      (Array.isArray(raw?.data) && raw.data.length > 0) ||
+      (Array.isArray(raw?.vendors) && raw.vendors.length > 0)
+    );
+  }
+
+  if (reportType === 'INVOICE_AGING') {
+    return Array.isArray(raw?.invoices) && raw.invoices.length > 0;
+  }
+
+  if (reportType === '3WAY_PENDING') {
+    return Array.isArray(raw?.pendingItems) && raw.pendingItems.length > 0;
+  }
+
+  return false;
+}
+
 // ---------------- CATEGORY HANDLERS ----------------
 const categoryHandlers = {
   'status-clarification': async ({ determinationJson }) => {
@@ -2051,6 +2084,7 @@ const categoryHandlers = {
       ((Array.isArray(serviceResponse.poItems) && serviceResponse.poItems.length > 0) ||
         (Array.isArray(serviceResponse.prItems) && serviceResponse.prItems.length > 0) ||
         (Array.isArray(serviceResponse.invoiceItems) && serviceResponse.invoiceItems.length > 0) ||
+        hasReportSpecificData(serviceResponse) ||
         (countRequested && serviceResponse?.totalCount !== null));
 
     if (!hasData) {
