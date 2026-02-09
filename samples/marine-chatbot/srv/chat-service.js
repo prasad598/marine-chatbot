@@ -856,6 +856,65 @@ function formatTopVendorReportPayload(resp, filters = {}) {
   return lines.join('\n');
 }
 
+function formatTopPoReportPayload(resp, filters = {}) {
+  const reportType = normalizeUpperValue(filters?.reportType || resp?.raw?.reportType);
+  if (reportType !== 'TOP_PO') return null;
+
+  const raw = resp?.raw && typeof resp.raw === 'object' ? resp.raw : {};
+  const topPoItems = Array.isArray(raw?.topPOs)
+    ? raw.topPOs
+    : Array.isArray(raw?.purchaseOrders)
+      ? raw.purchaseOrders
+      : Array.isArray(raw?.poItems)
+        ? raw.poItems
+        : [];
+  const reportFilters = raw?.filters && typeof raw.filters === 'object' ? raw.filters : {};
+  const requestedTopN =
+    normalizeNumber(filters?.topN) ||
+    normalizeNumber(reportFilters?.topN) ||
+    normalizeNumber(reportFilters?.top) ||
+    topPoItems.length;
+
+  const lines = [];
+  lines.push(`Displaying top ${requestedTopN || topPoItems.length || 0} purchase orders by value.`);
+  lines.push('');
+  lines.push(joinLine('Success', raw?.success));
+  lines.push(joinLine('Message', raw?.message));
+  lines.push(joinLine('Report Type', raw?.reportType || reportType));
+  lines.push('Filters:');
+  lines.push(`- ${joinLine('Purchasing Org', reportFilters?.purchasingOrg || filters?.purchasingOrg)}`);
+  lines.push(`- ${joinLine('Date From', reportFilters?.dateFrom || filters?.dateFrom)}`);
+  lines.push(`- ${joinLine('Date To', reportFilters?.dateTo || filters?.dateTo)}`);
+  lines.push(`- ${joinLine('Minimum Value', reportFilters?.minValue || filters?.minValue)}`);
+  lines.push(`- ${joinLine('Top N', reportFilters?.topN || filters?.topN || requestedTopN)}`);
+  lines.push(`- ${joinLine('Skip', reportFilters?.skip)}`);
+  lines.push(`- ${joinLine('Top', reportFilters?.top)}`);
+  lines.push(joinLine('Total POs', raw?.totalPOs));
+  lines.push('');
+
+  if (!topPoItems.length) {
+    lines.push('No purchase order records were returned for the selected filters.');
+    return lines.join('\n');
+  }
+
+  lines.push('Top Purchase Order Results:');
+  topPoItems.forEach((it, idx) => {
+    lines.push(`${idx + 1}.`);
+    lines.push(joinLine('Rank', pickFirst(it, ['rank'])));
+    lines.push(joinLine('PO Number', pickFirst(it, ['poNumber'])));
+    lines.push(joinLine('PO Date', pickFirst(it, ['poDate'])));
+    lines.push(joinLine('Vendor Code', pickFirst(it, ['vendorCode'])));
+    lines.push(joinLine('Vendor Name', pickFirst(it, ['vendorName'])));
+    lines.push(joinLine('Total Value', pickFirst(it, ['totalValue'])));
+    lines.push(joinLine('Currency', pickFirst(it, ['currency'])));
+    lines.push(joinLine('Item Count', pickFirst(it, ['itemCount'])));
+    lines.push(joinLine('Description', pickFirst(it, ['description'])));
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
 function formatInvoiceAgingReportPayload(resp, filters = {}) {
   const reportType = normalizeUpperValue(filters?.reportType || resp?.raw?.reportType);
   if (reportType !== 'INVOICE_AGING') return null;
@@ -1597,6 +1656,11 @@ function formatSearchResultsNice(
   const topVendorResponse = formatTopVendorReportPayload(resp, filters);
   if (topVendorResponse) {
     return topVendorResponse;
+  }
+
+  const topPoResponse = formatTopPoReportPayload(resp, filters);
+  if (topPoResponse) {
+    return topPoResponse;
   }
 
   const invoiceAgingResponse = formatInvoiceAgingReportPayload(resp, filters);
