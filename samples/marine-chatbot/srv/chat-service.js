@@ -675,14 +675,24 @@ function formatOverdueReportPayload(resp, filters = {}) {
 
 function normalizeDocNumbers(rawNumbers) {
   if (!rawNumbers) return [];
+  const normalizeToken = (value) =>
+    `${value}`
+      .trim()
+      .replace(/^['"`]+|['"`]+$/g, '')
+      .replace(/[.,;:!?]+$/g, '')
+      .trim();
+
+  const splitTokens = (value) =>
+    `${value}`
+      .split(/\s*(?:,|;|\n|\r|\t|\band\b)\s*/i)
+      .map(normalizeToken)
+      .filter((token) => /[a-z0-9]/i.test(token));
+
   if (Array.isArray(rawNumbers)) {
-    return rawNumbers
-      .flatMap((entry) => `${entry}`.match(/\d+/g) || [])
-      .map((value) => value.trim())
-      .filter(Boolean);
+    return rawNumbers.flatMap((entry) => splitTokens(entry));
   }
 
-  return `${rawNumbers}`.match(/\d+/g)?.map((value) => value.trim()).filter(Boolean) || [];
+  return splitTokens(rawNumbers);
 }
 
 function parsePaginationRequest(userQuery) {
@@ -906,7 +916,7 @@ function extractDocumentContextFromText(text) {
   const labeledPatterns = [
     { docType: 'PO', regex: /(?:PO Number|Purchase Order)\s*(?:Number)?\s*[:#-]?\s*(\d{4,})/gi },
     { docType: 'PR', regex: /(?:PR Number|Purchase Requisition)\s*(?:Number)?\s*[:#-]?\s*(\d{4,})/gi },
-    { docType: 'INV', regex: /(?:Invoice Number|Invoice No\.?|Invoice)\s*(?:Number)?\s*[:#-]?\s*(\d{4,})/gi }
+    { docType: 'INV', regex: /(?:Invoice Number|Invoice No\.?|Invoice)\s*(?:Number)?\s*[:#-]?\s*([A-Z0-9-]{4,})/gi }
   ];
 
   labeledPatterns.forEach(({ docType, regex }) => {
