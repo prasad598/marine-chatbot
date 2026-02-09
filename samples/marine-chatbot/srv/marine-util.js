@@ -212,8 +212,8 @@ async function getDocumentStatus({ docType, numbers }) {
 
 async function searchDocuments(filters = {}) {
   const normalizedReportType = filters.reportType ? String(filters.reportType).trim().toUpperCase() : '';
-  const isTopVendorReport = normalizedReportType === 'TOP_VENDOR';
-  const isCountRequest = isTopVendorReport ? false : Boolean(filters.count);
+  const isTopReport = normalizedReportType.startsWith('TOP_');
+  const isCountRequest = isTopReport ? false : Boolean(filters.count);
   const isOverdueReport =
     normalizedReportType &&
     ['INVOICE_OVERDUE', 'PR_OVERDUE', 'PO_OVERDUE'].includes(normalizedReportType);
