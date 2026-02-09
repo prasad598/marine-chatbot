@@ -955,8 +955,6 @@ function formatInvoiceAgingReportPayload(resp, filters = {}) {
 
   const lines = [];
   lines.push('Invoice Aging Report:');
-  lines.push(joinLine('Success', raw?.success));
-  lines.push(joinLine('Message', raw?.message));
   lines.push(joinLine('Report Type', raw?.reportType || reportType));
   lines.push(joinLine('Vendor Code', raw?.vendorCode || reportFilters?.vendor || filters?.vendor));
   lines.push(joinLine('Vendor Name', raw?.vendorName));
@@ -969,11 +967,21 @@ function formatInvoiceAgingReportPayload(resp, filters = {}) {
 
   lines.push('Aging Summary:');
   lines.push(`- ${joinLine('Current (0-30 Days)', pickFirst(agingSummary?.current || {}, ['amount']))}`);
+  lines.push(`  • ${joinLine('Current Label', pickFirst(agingSummary?.current || {}, ['label']))}`);
+  lines.push(`  • ${joinLine('Current Count', pickFirst(agingSummary?.current || {}, ['count']))}`);
   lines.push(`- ${joinLine('31-60 Days', pickFirst(agingSummary?.aging30 || {}, ['amount']))}`);
+  lines.push(`  • ${joinLine('31-60 Label', pickFirst(agingSummary?.aging30 || {}, ['label']))}`);
+  lines.push(`  • ${joinLine('31-60 Count', pickFirst(agingSummary?.aging30 || {}, ['count']))}`);
   lines.push(`- ${joinLine('61-90 Days', pickFirst(agingSummary?.aging60 || {}, ['amount']))}`);
+  lines.push(`  • ${joinLine('61-90 Label', pickFirst(agingSummary?.aging60 || {}, ['label']))}`);
+  lines.push(`  • ${joinLine('61-90 Count', pickFirst(agingSummary?.aging60 || {}, ['count']))}`);
   lines.push(`- ${joinLine('Over 90 Days', pickFirst(agingSummary?.aging90 || {}, ['amount']))}`);
+  lines.push(`  • ${joinLine('Over 90 Label', pickFirst(agingSummary?.aging90 || {}, ['label']))}`);
+  lines.push(`  • ${joinLine('Over 90 Count', pickFirst(agingSummary?.aging90 || {}, ['count']))}`);
   lines.push(joinLine('Total Outstanding', agingSummary?.totalOutstanding));
   lines.push(joinLine('Total Count', agingSummary?.totalCount));
+  appendAdditionalFields(lines, agingSummary, new Set(['current', 'aging30', 'aging60', 'aging90', 'totalOutstanding', 'totalCount']));
+  appendAdditionalFields(lines, raw, new Set(['success', 'message', 'reportType', 'filters', 'vendorCode', 'vendorName', 'agingSummary', 'invoices', 'invoiceItems']));
   lines.push('');
 
   if (!invoices.length) {
@@ -1932,7 +1940,11 @@ function hasReportSpecificData(resp = {}) {
   }
 
   if (reportType === 'INVOICE_AGING') {
-    return Array.isArray(raw?.invoices) && raw.invoices.length > 0;
+    const hasInvoiceRows =
+      (Array.isArray(raw?.invoices) && raw.invoices.length > 0) ||
+      (Array.isArray(raw?.invoiceItems) && raw.invoiceItems.length > 0);
+    const hasSummary = raw?.agingSummary && typeof raw.agingSummary === 'object';
+    return hasInvoiceRows || hasSummary;
   }
 
   if (reportType === '3WAY_PENDING') {
