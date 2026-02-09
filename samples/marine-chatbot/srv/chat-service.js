@@ -101,6 +101,10 @@ Examples for search filters:
   { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "count": true }
 - "Which are the top 10 POs by value in FY2025 under purchasing org 3022?" ->
   { "reportType": "TOP_PO", "purchasingOrg": "3022", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "topN": 10 }
+- "Who are the top 5 contractors by PO value in purchasing org 1000?" ->
+  { "reportType": "TOP_VENDOR", "purchasingOrg": "1000", "topN": 5 }
+- "List PRs pending for approval" ->
+  { "reportType": "PR_PENDING", "docType": "PR_PENDING" }
 - "Show me POs above SGD 300,000 created this quarter" ->
   { "reportType": "TOP_PO", "purchasingOrg": "3022", "dateFrom": "01.01.2025", "dateTo": "31.03.2025", "minValue": 300000 }
 
@@ -1084,6 +1088,58 @@ function formatThreeWayPendingReportPayload(resp, filters = {}) {
   return lines.join('\n');
 }
 
+
+function formatPrPendingReportPayload(resp, filters = {}) {
+  const reportType = normalizeUpperValue(filters?.reportType || resp?.raw?.reportType || filters?.docType || resp?.raw?.docType);
+  if (reportType !== 'PR_PENDING') return null;
+
+  const raw = resp?.raw && typeof resp.raw === 'object' ? resp.raw : {};
+  const reportFilters = raw?.filters && typeof raw.filters === 'object' ? raw.filters : {};
+  const pendingItems = Array.isArray(raw?.pendingItems)
+    ? raw.pendingItems
+    : Array.isArray(raw?.prItems)
+      ? raw.prItems
+      : Array.isArray(resp?.prItems)
+        ? resp.prItems
+        : [];
+  const topItems = pendingItems.slice(0, 20);
+  const totalPending = Number.isFinite(raw?.totalPending) ? raw.totalPending : pendingItems.length;
+
+  const lines = [];
+  lines.push('Purchase Requisitions Pending Approval:');
+  lines.push(joinLine('Total Pending PRs', totalPending));
+  lines.push(joinLine('Showing Top Items', Math.min(20, pendingItems.length)));
+  lines.push(joinLine('Purchasing Org', reportFilters?.purchasingOrg || filters?.purchasingOrg));
+  lines.push('');
+
+  if (!pendingItems.length) {
+    lines.push('No pending purchase requisitions were returned for the selected filters.');
+    return lines.join('\n');
+  }
+
+  topItems.forEach((it, idx) => {
+    lines.push(`${idx + 1}.`);
+    lines.push(joinLine('PR Number', pickFirst(it, ['prNumber'])));
+    lines.push(joinLine('PR Item', pickFirst(it, ['prItem'])));
+    lines.push(joinLine('PR Date', pickFirst(it, ['prDate'])));
+    lines.push(joinLine('Requested Delivery Date', pickFirst(it, ['requestedDeliveryDate'])));
+    lines.push(joinLine('Days Pending', pickFirst(it, ['daysPending'])));
+    lines.push(joinLine('Requestor ID', pickFirst(it, ['requestorId'])));
+    lines.push(joinLine('Requestor Name', pickFirst(it, ['requestorName'])));
+    lines.push(joinLine('Creator ID', pickFirst(it, ['creatorId'])));
+    lines.push(joinLine('Creator Name', pickFirst(it, ['creatorName'])));
+    lines.push(joinLine('Description', pickFirst(it, ['description'])));
+    lines.push(joinLine('Estimated Value', pickFirst(it, ['estimatedValue'])));
+    lines.push(joinLine('Currency', pickFirst(it, ['currency'])));
+    lines.push(joinLine('Release Indicator', pickFirst(it, ['releaseIndicator'])));
+    lines.push(joinLine('Release Status', pickFirst(it, ['releaseStatus'])));
+    lines.push(joinLine('Plant', pickFirst(it, ['plant'])));
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
 function normalizeDocNumbers(rawNumbers) {
   if (!rawNumbers) return [];
   const normalizeToken = (value) =>
@@ -1235,6 +1291,18 @@ function inferSearchFiltersFromQuery(userQuery = '') {
 
   if (/\b(3\s*[- ]?way|three\s*[- ]?way|liv\s+approval)\b/.test(query) && /\b(pending|approval)\b/.test(query)) {
     inferredFilters.reportType = '3WAY_PENDING';
+  }
+
+  const topVendorKeywords = /\b(top|highest|largest)\b/.test(query) && /\b(contractors?|vendors?)\b/.test(query);
+  if (topVendorKeywords) {
+    inferredFilters.reportType = 'TOP_VENDOR';
+    const topNMatch = query.match(/\btop\s+(\d{1,3})\b/);
+    inferredFilters.topN = topNMatch ? Number(topNMatch[1]) : 5;
+  }
+
+  if (/\b(prs?|purchase\s+requisitions?)\b/.test(query) && /\b(pending|awaiting)\b/.test(query) && /\bapproval\b/.test(query)) {
+    inferredFilters.reportType = 'PR_PENDING';
+    inferredFilters.docType = 'PR_PENDING';
   }
 
   return inferredFilters;
@@ -1728,6 +1796,11 @@ function formatSearchResultsNice(
     return threeWayPendingResponse;
   }
 
+  const prPendingResponse = formatPrPendingReportPayload(resp, filters);
+  if (prPendingResponse) {
+    return prPendingResponse;
+  }
+
   if (countRequested && !hasLineItems && resp?.totalCount !== null && resp?.totalCount !== undefined) {
     return formatSearchCountSummary(resp.totalCount, {
       docType: resolvedDocType,
@@ -1862,6 +1935,10 @@ function hasReportSpecificData(resp = {}) {
   }
 
   if (reportType === '3WAY_PENDING') {
+    return Array.isArray(raw?.pendingItems) && raw.pendingItems.length > 0;
+  }
+
+  if (reportType === 'PR_PENDING') {
     return Array.isArray(raw?.pendingItems) && raw.pendingItems.length > 0;
   }
 
@@ -2032,6 +2109,20 @@ const categoryHandlers = {
         deterministic: {
           role: 'assistant',
           content: 'Please provide the Purchasing Organization to fetch LIV approval pending PO items for 3-way matched records.',
+          additionalContents: []
+        }
+      };
+    }
+
+    if (normalizeUpperValue(filters?.reportType) === 'TOP_VENDOR' && !filters?.purchasingOrg) {
+      updateCachedSearchFilters(conversationId, {
+        ...filters,
+        reportType: 'TOP_VENDOR'
+      });
+      return {
+        deterministic: {
+          role: 'assistant',
+          content: 'Please provide the Purchasing Organization to fetch the top vendors/contractors by PO value.',
           additionalContents: []
         }
       };
@@ -2378,11 +2469,12 @@ module.exports = function () {
       const hasIncomingFilters = hasSearchFilters(mergedIncomingFilters);
       const cachedSearch = getCachedSearchFilters(conversationId);
       const isPurchasingOrgReply = /^\s*\d{3,6}\s*$/.test(`${user_query || ''}`);
-      const pendingThreeWayWithoutOrg =
-        normalizeUpperValue(cachedSearch.filters?.reportType) === '3WAY_PENDING' &&
+      const pendingOrgReportTypes = ['3WAY_PENDING', 'TOP_VENDOR'];
+      const pendingReportWithoutOrg =
+        pendingOrgReportTypes.includes(normalizeUpperValue(cachedSearch.filters?.reportType)) &&
         !cachedSearch.filters?.purchasingOrg;
       const shouldReuseSearchFilters = !hasIncomingFilters && cachedSearch.filters &&
-        (isListFollowUp(user_query) || hasFollowUpHint(user_query) || (pendingThreeWayWithoutOrg && isPurchasingOrgReply));
+        (isListFollowUp(user_query) || hasFollowUpHint(user_query) || (pendingReportWithoutOrg && isPurchasingOrgReply));
 
       if (!category) {
         if (hasIncomingFilters) {
@@ -2399,7 +2491,7 @@ module.exports = function () {
           ...determinationJson,
           filters: {
             ...cachedSearch.filters,
-            ...(pendingThreeWayWithoutOrg && isPurchasingOrgReply ? { purchasingOrg: `${user_query}`.trim() } : {}),
+            ...(pendingReportWithoutOrg && isPurchasingOrgReply ? { purchasingOrg: `${user_query}`.trim() } : {}),
             count: false
           }
         };
