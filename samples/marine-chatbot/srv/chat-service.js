@@ -1056,6 +1056,12 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
   };
 }
 
+function shouldSkipCountForSmallTop({ requestedTop, requestedTopN } = {}) {
+  const top = normalizeNumber(requestedTop);
+  const topN = normalizeNumber(requestedTopN);
+  return (Number.isFinite(top) && top > 0 && top <= 10) || (Number.isFinite(topN) && topN > 0 && topN <= 10);
+}
+
 function extractDocumentContextFromText(text) {
   if (!text) return { docType: '', documentNumbers: [] };
   const content = `${text}`;
@@ -1402,7 +1408,7 @@ function buildListRetrievalSummary({ totalCount, shownCount, pageSize, skip, lab
 
 function formatSearchResultsNice(
   resp,
-  { countRequested, filters = {}, docType, paymentStatus, dateFrom, dateTo, pageSize, skip } = {}
+  { countRequested, filters = {}, docType, paymentStatus, dateFrom, dateTo, pageSize, skip, showListSummary = true } = {}
 ) {
   const poItems = Array.isArray(resp?.poItems) ? resp.poItems : [];
   const prItems = Array.isArray(resp?.prItems) ? resp.prItems : [];
@@ -1444,7 +1450,7 @@ function formatSearchResultsNice(
     label: resolvedDocType === 'INV' ? 'invoices' : resolvedDocType === 'PO' ? 'purchase orders' : resolvedDocType === 'PR' ? 'purchase requisitions' : 'records'
   });
 
-  if (listSummary) {
+  if (showListSummary && listSummary) {
     lines.push(listSummary);
     lines.push('');
   }
@@ -1455,8 +1461,6 @@ function formatSearchResultsNice(
   if (rawReportType) {
     const displayFilters = rawFilters || filters || {};
     lines.push('Report Metadata:');
-    lines.push(joinLine('Success', pickFirst(resp?.raw || {}, ['success'], resp?.success ? 'true' : 'false')));
-    lines.push(joinLine('Message', pickFirst(resp?.raw || {}, ['message'], resp?.message || '')));
     lines.push(joinLine('Report Type', rawReportType));
     if (rawTotalMatches !== '') {
       lines.push(joinLine('Total Matches', rawTotalMatches));
@@ -1654,7 +1658,9 @@ const categoryHandlers = {
     const creator = filters?.creator;
     const approver = filters?.approver;
     const requestedTop = normalizeNumber(filters?.top);
+    const requestedTopN = normalizeNumber(filters?.topN);
     const requestedSkip = normalizeNumber(filters?.skip);
+    const skipCountForSmallTop = shouldSkipCountForSmallTop({ requestedTop, requestedTopN });
     const paginationRequest = parsePaginationRequest(user_query);
     const pageSize = paginationRequest?.pageSize || PAGE_SIZE_DEFAULT;
     const top = countRequested
@@ -1680,10 +1686,11 @@ const categoryHandlers = {
       };
     }
 
+    const shouldFetchCount = !countRequested && !skipCountForSmallTop;
+
     const countResponse =
-      countRequested
-        ? null
-        : await marine_util.searchDocuments({
+      shouldFetchCount
+        ? await marine_util.searchDocuments({
             purchaseOrder: filters?.purchaseOrder,
             purchaseRequisition: filters?.purchaseRequisition,
             invoice: filters?.invoice,
@@ -1711,7 +1718,8 @@ const categoryHandlers = {
             description: filters?.description,
             overdueDays: filters?.overdueDays,
             count: true
-          });
+          })
+        : null;
 
     const serviceResponse = await marine_util.searchDocuments({
       purchaseOrder: filters?.purchaseOrder,
@@ -1745,7 +1753,7 @@ const categoryHandlers = {
       count: countRequested
     });
 
-    if (!countRequested && countResponse?.totalCount !== null && countResponse?.totalCount !== undefined) {
+    if (shouldFetchCount && countResponse?.totalCount !== null && countResponse?.totalCount !== undefined) {
       serviceResponse.totalCount = countResponse.totalCount;
     }
 
@@ -1780,7 +1788,8 @@ const categoryHandlers = {
       dateFrom: filters?.dateFrom,
       dateTo: filters?.dateTo,
       pageSize: top || PAGE_SIZE_DEFAULT,
-      skip: skip || 0
+      skip: skip || 0,
+      showListSummary: shouldFetchCount
     });
 
     return {
