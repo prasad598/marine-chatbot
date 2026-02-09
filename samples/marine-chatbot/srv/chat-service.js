@@ -1185,6 +1185,39 @@ function extractSearchFilters(determinationJson = {}) {
   return flattenedFilters;
 }
 
+function inferSearchFiltersFromQuery(userQuery = '') {
+  const query = `${userQuery}`.trim().toLowerCase();
+  if (!query) return {};
+
+  const inferredFilters = {};
+
+  const mentionsOverdue = /\boverdue\b/.test(query);
+  const mentionsPr = /\b(prs?|purchase\s+requisitions?)\b/.test(query);
+  const mentionsPo = /\b(pos?|purchase\s+orders?)\b/.test(query);
+  const mentionsConversion = /\b(convert|conversion|converted|into)\b/.test(query);
+
+  if (mentionsOverdue && mentionsPr && (mentionsPo || mentionsConversion)) {
+    inferredFilters.reportType = 'PR_OVERDUE';
+    inferredFilters.docType = 'PR';
+    inferredFilters.purchasingOrg = '3022';
+    inferredFilters.topN = 20;
+  }
+
+  if (mentionsOverdue && mentionsPo && !inferredFilters.reportType) {
+    inferredFilters.reportType = 'PO_OVERDUE';
+    inferredFilters.docType = 'PO';
+    inferredFilters.topN = 20;
+  }
+
+  if (mentionsOverdue && /\b(invoices?|inv)\b/.test(query) && !inferredFilters.reportType) {
+    inferredFilters.reportType = 'INVOICE_OVERDUE';
+    inferredFilters.docType = 'INV';
+    inferredFilters.topN = 20;
+  }
+
+  return inferredFilters;
+}
+
 function getCachedConversationContext(conversationId) {
   if (!conversationId) return { docType: '', documentNumbers: [] };
   const cached = conversationContextCache.get(conversationId);
@@ -2267,7 +2300,12 @@ module.exports = function () {
       );
 
       const incomingFilters = extractSearchFilters(determinationJson);
-      const hasIncomingFilters = hasSearchFilters(incomingFilters);
+      const inferredFilters = hasSearchFilters(incomingFilters) ? {} : inferSearchFiltersFromQuery(user_query);
+      const mergedIncomingFilters = {
+        ...inferredFilters,
+        ...incomingFilters
+      };
+      const hasIncomingFilters = hasSearchFilters(mergedIncomingFilters);
       const cachedSearch = getCachedSearchFilters(conversationId);
       const shouldReuseSearchFilters = !hasIncomingFilters && cachedSearch.filters &&
         (isListFollowUp(user_query) || hasFollowUpHint(user_query));
@@ -2294,8 +2332,11 @@ module.exports = function () {
       } else if (hasIncomingFilters) {
         determinationJson = {
           ...determinationJson,
-          filters: incomingFilters
+          filters: mergedIncomingFilters
         };
+        if (category === 'generic-query' || !category) {
+          category = 'document-search';
+        }
       }
 
       if (!docType || documentNumbers.length === 0) {
@@ -2308,12 +2349,15 @@ module.exports = function () {
         }
       }
 
-      const cachedContext = getCachedConversationContext(conversationId);
-      if (!docType && cachedContext.docType) {
-        docType = cachedContext.docType;
-      }
-      if (!documentNumbers.length && cachedContext.documentNumbers.length) {
-        documentNumbers = cachedContext.documentNumbers;
+      const allowConversationContextReuse = hasFollowUpHint(user_query) || isListFollowUp(user_query);
+      if (allowConversationContextReuse) {
+        const cachedContext = getCachedConversationContext(conversationId);
+        if (!docType && cachedContext.docType) {
+          docType = cachedContext.docType;
+        }
+        if (!documentNumbers.length && cachedContext.documentNumbers.length) {
+          documentNumbers = cachedContext.documentNumbers;
+        }
       }
 
       const shouldResolveFromHistory =
