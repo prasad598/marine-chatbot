@@ -193,6 +193,42 @@ function joinLine(label, value) {
   return `${label}: ${val || 'N/A'}`;
 }
 
+function toFriendlyLabel(key) {
+  if (!key) return 'Field';
+  const normalized = String(key)
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .trim();
+  return normalized
+    .split(/\s+/)
+    .map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : part)
+    .join(' ');
+}
+
+function appendAdditionalFields(lines, source = {}, usedKeys = new Set(), { skipArrays = true } = {}) {
+  if (!source || typeof source !== 'object') return;
+
+  Object.entries(source).forEach(([key, value]) => {
+    if (usedKeys.has(key)) return;
+    if (value === undefined || value === null) return;
+
+    if (Array.isArray(value)) {
+      if (!skipArrays) {
+        lines.push(joinLine(toFriendlyLabel(key), `${value.length} item(s)`));
+      }
+      return;
+    }
+
+    if (typeof value === 'object') {
+      return;
+    }
+
+    const normalizedValue = String(value).trim();
+    if (!normalizedValue) return;
+    lines.push(joinLine(toFriendlyLabel(key), normalizedValue));
+  });
+}
+
 function formatPoItemDetails(lines, it, idx, fallbackPo) {
   const poNo = pickFirst(it, ['PO Number', 'ebeln', 'poNumber'], fallbackPo);
   const poItem = pickFirst(it, ['PO Item', 'ebelp', 'poItem']);
@@ -210,6 +246,7 @@ function formatPoItemDetails(lines, it, idx, fallbackPo) {
   const poDate = pickFirst(it, ['PO Date', 'bedat', 'poDate'], '');
   const vendorCode = pickFirst(it, ['Vendor Code', 'lifnr', 'vendorCode'], '');
   const vendorName = pickFirst(it, ['Vendor Name', 'name1', 'vendorName'], '');
+  const description = pickFirst(it, ['Description', 'description', 'Short Text', 'txz01'], '');
   const poCreatorId = pickFirst(it, ['PO Creator ID', 'poCreatorId'], '');
   const poCreatorName = pickFirst(it, ['PO Creator', 'poCreatorName'], '');
   const poApproverId = pickFirst(it, ['PO Approver ID', 'poApproverId'], '');
@@ -235,6 +272,7 @@ function formatPoItemDetails(lines, it, idx, fallbackPo) {
   if (poDate) lines.push(joinLine('PO Date', poDate));
   if (vendorCode) lines.push(joinLine('Vendor Code', vendorCode));
   if (vendorName) lines.push(joinLine('Vendor Name', vendorName));
+  if (description) lines.push(joinLine('Description', description));
   if (poCreatorId) lines.push(joinLine('PO Creator ID', poCreatorId));
   if (poCreatorName) lines.push(joinLine('PO Creator Name', poCreatorName));
   if (poApproverId) lines.push(joinLine('PO Approver ID', poApproverId));
@@ -243,6 +281,34 @@ function formatPoItemDetails(lines, it, idx, fallbackPo) {
   if (wbsElement) lines.push(joinLine('WBS Element', wbsElement));
   if (costCenter) lines.push(joinLine('Cost Center', costCenter));
   if (glAccount) lines.push(joinLine('GL Account', glAccount));
+
+  appendAdditionalFields(lines, it, new Set([
+    'PO Number', 'ebeln', 'poNumber',
+    'PO Item', 'ebelp', 'poItem',
+    'PO Status', 'poStatus',
+    'Del. Indicator', 'loekz',
+    'PO Deleted', 'poDeleted',
+    'PR Number', 'banfn', 'prNumber',
+    'PR Item', 'bnfpo', 'prItem',
+    'Material Number', 'matnr', 'materialNumber',
+    'Material Desc', 'txz01', 'materialDescription', 'Short Text',
+    'Quantity', 'menge', 'quantity',
+    'UOM', 'meins', 'uom',
+    'Net Value', 'netValue',
+    'Currency', 'waers', 'currency',
+    'PO Date', 'bedat', 'poDate',
+    'Vendor Code', 'lifnr', 'vendorCode',
+    'Vendor Name', 'name1', 'vendorName',
+    'Description', 'description',
+    'PO Creator ID', 'poCreatorId',
+    'PO Creator', 'poCreatorName',
+    'PO Approver ID', 'poApproverId',
+    'PO Approver', 'poApproverName',
+    'PO Approve Date', 'poApproveDate',
+    'WBS Element', 'wbsElement',
+    'Cost Center', 'kostl', 'costCenter',
+    'GL Account', 'sakto', 'glAccount'
+  ]));
   lines.push('');
 }
 
@@ -286,6 +352,28 @@ function formatPrItemDetails(lines, it, idx, fallbackPr) {
   lines.push(joinLine('Rejected', rejected));
   if (delInd) lines.push(joinLine('Deletion Indicator', delInd));
   if (linkedPo) lines.push(joinLine('Linked PO', linkedPoItem ? `${linkedPo} / ${linkedPoItem}` : linkedPo));
+
+  appendAdditionalFields(lines, it, new Set([
+    'PR Number', 'banfn', 'prNumber',
+    'PR Item', 'bnfpo', 'prItem',
+    'PR Status', 'prStatus',
+    'Release ind.', 'frgkz', 'releaseIndicator',
+    'Release Status', 'releaseStatus',
+    'PR Release Date', 'prReleaseDate',
+    'PR Date', 'prDate',
+    'PR Creator ID', 'prCreatorId',
+    'PR Creator', 'prCreatorName',
+    'PR Requestor ID', 'prRequestorId',
+    'PR Requestor', 'prRequestorName',
+    'PR Approver ID', 'prApproverId',
+    'PR Approver', 'prApproverName',
+    'PR Approve Date', 'prApproveDate',
+    'PR Deleted', 'prDeleted',
+    'PR Rejected', 'prRejected',
+    'Del. Indicator', 'loekz',
+    'PO Number', 'ebeln', 'poNumber',
+    'PO Item', 'ebelp', 'poItem'
+  ]));
   lines.push('');
 }
 
@@ -335,6 +423,31 @@ function formatInvoiceItemDetails(lines, it, idx) {
   if (invApproverId) lines.push(joinLine('Invoice Approver ID', invApproverId));
   if (invApproverName) lines.push(joinLine('Invoice Approver Name', invApproverName));
   if (invApproveDate) lines.push(joinLine('Invoice Approve Date', invApproveDate));
+
+  appendAdditionalFields(lines, it, new Set([
+    'invoiceNo', 'Invoice No', 'Invoice Number', 'invoiceNumber', 'invoiceDocNumber',
+    'Fiscal Year', 'fiscalYear',
+    'Invoice Reference', 'invoiceReference',
+    'Vendor Code', 'vendorCode', 'lifnr',
+    'Vendor Name', 'vendorName', 'name1',
+    'invoiceValue', 'Invoice Value', 'Invoice Amount', 'grossAmount', 'dmbtr',
+    'Tax Amount', 'taxAmount', 'mwsts',
+    'Net Amount', 'netAmount', 'wrbtr',
+    'Currency', 'currency', 'waers',
+    'paymentStatus', 'Payment Status', 'livStatus', 'LIV Status', 'Invoice Status',
+    'invoiceDocDate', 'Doc Date', 'Document Date', 'bldat',
+    'invoicePostDate', 'Posting Date', 'budat',
+    'paymentDueOn', 'Payment Due On', 'Payment Due Date', 'paymentDueDate', 'netdt',
+    'Clearing Document', 'clearingDocument', 'augbl',
+    'clearingDate', 'Clearing Date', 'augdt',
+    'Paid Amount', 'paidAmount',
+    'Invoice Creator ID', 'invCreatorId',
+    'Invoice Creator', 'invCreatorName',
+    'Invoice Approver ID', 'invApproverId',
+    'Invoice Approver', 'invApproverName',
+    'Invoice Approve Date', 'invApproveDate',
+    'lineItems'
+  ]));
 
   if (lineItems.length) {
     lines.push('Line Items:');
@@ -1333,6 +1446,59 @@ function formatSearchResultsNice(
 
   if (listSummary) {
     lines.push(listSummary);
+    lines.push('');
+  }
+
+  const rawReportType = pickFirst(resp?.raw || {}, ['reportType'], '').toUpperCase();
+  const rawFilters = resp?.raw?.filters && typeof resp.raw.filters === 'object' ? resp.raw.filters : null;
+  const rawTotalMatches = pickFirst(resp?.raw || {}, ['totalMatches'], '');
+  if (rawReportType) {
+    const displayFilters = rawFilters || filters || {};
+    lines.push('Report Metadata:');
+    lines.push(joinLine('Success', pickFirst(resp?.raw || {}, ['success'], resp?.success ? 'true' : 'false')));
+    lines.push(joinLine('Message', pickFirst(resp?.raw || {}, ['message'], resp?.message || '')));
+    lines.push(joinLine('Report Type', rawReportType));
+    if (rawTotalMatches !== '') {
+      lines.push(joinLine('Total Matches', rawTotalMatches));
+    }
+
+    const filterDisplayMap = [
+      ['description', 'Description'],
+      ['purchasingOrg', 'Purchasing Org'],
+      ['dateFrom', 'Date From'],
+      ['dateTo', 'Date To'],
+      ['docType', 'Document Type'],
+      ['topN', 'Top N'],
+      ['top', 'Top'],
+      ['skip', 'Skip']
+    ];
+
+    const selectedFilters = filterDisplayMap
+      .map(([key, label]) => [label, displayFilters?.[key], key])
+      .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '');
+
+    if (selectedFilters.length) {
+      lines.push('Filters:');
+      selectedFilters.forEach(([label, value]) => {
+        lines.push(`- ${joinLine(label, value)}`);
+      });
+    }
+
+    appendAdditionalFields(lines, resp?.raw || {}, new Set([
+      'success',
+      'message',
+      'reportType',
+      'totalMatches',
+      'filters',
+      'poItems',
+      'prItems',
+      'invoiceItems',
+      'purchaseOrders',
+      'purchaseRequisitions',
+      'invoices'
+    ]));
+
+    appendAdditionalFields(lines, displayFilters, new Set(selectedFilters.map(([, , key]) => key)));
     lines.push('');
   }
 
