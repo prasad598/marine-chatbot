@@ -106,7 +106,7 @@ Examples for search filters:
 - "List PRs pending for approval" ->
   { "reportType": "PR_PENDING", "docType": "PR_PENDING" }
 - "Show me POs above SGD 300,000 created this quarter" ->
-  { "reportType": "TOP_PO", "purchasingOrg": "3022", "dateFrom": "01.01.2025", "dateTo": "31.03.2025", "minValue": 300000 }
+  { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.03.2025", "minValue": 300000 }
 
 Query formation guidance:
 - Use DocType=PO/PR/INV when the user specifies purchase orders, requisitions, or invoices.
@@ -114,6 +114,7 @@ Query formation guidance:
 - Use DateFrom/DateTo for issuance dates, ApproveFromDate/ApproveToDate for approval dates, DueFromDate/DueToDate for due dates.
 - Use POStatus/PRStatus for approval/release status, SEStatus for service entry status, SAStatus for service acceptance status.
 - Use MinValue for value thresholds and TopN for top-N reports.
+- Do not use TOP_PO/TOP_VENDOR when the user only asks for documents above a value threshold; use DocType + MinValue (+ date range) instead.
 - Use ReportType for special reports (TOP_VENDOR, TOP_PO, SEARCH_DESC, PR_APPROVED, PR_PENDING, INVOICE_AGING, INVOICE_OVERDUE, PR_OVERDUE, 3WAY_PENDING, PO_OVERDUE).
 - For TOP_* report types (for example TOP_PO, TOP_VENDOR, TOP_PR, TOP_INV), never set count=true.
 - For overdue reports, use ReportType + OverdueDays and do not include PaymentStatus.
