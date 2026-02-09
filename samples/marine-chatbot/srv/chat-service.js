@@ -856,6 +856,157 @@ function formatTopVendorReportPayload(resp, filters = {}) {
   return lines.join('\n');
 }
 
+function formatInvoiceAgingReportPayload(resp, filters = {}) {
+  const reportType = normalizeUpperValue(filters?.reportType || resp?.raw?.reportType);
+  if (reportType !== 'INVOICE_AGING') return null;
+
+  const raw = resp?.raw && typeof resp.raw === 'object' ? resp.raw : {};
+  const reportFilters = raw?.filters && typeof raw.filters === 'object' ? raw.filters : {};
+  const agingSummary = raw?.agingSummary && typeof raw.agingSummary === 'object' ? raw.agingSummary : {};
+  const invoices = Array.isArray(raw?.invoices)
+    ? raw.invoices
+    : Array.isArray(raw?.invoiceItems)
+      ? raw.invoiceItems
+      : [];
+
+  const lines = [];
+  lines.push('Invoice Aging Report:');
+  lines.push(joinLine('Success', raw?.success));
+  lines.push(joinLine('Message', raw?.message));
+  lines.push(joinLine('Report Type', raw?.reportType || reportType));
+  lines.push(joinLine('Vendor Code', raw?.vendorCode || reportFilters?.vendor || filters?.vendor));
+  lines.push(joinLine('Vendor Name', raw?.vendorName));
+  lines.push('');
+
+  lines.push('Filters:');
+  lines.push(`- ${joinLine('Vendor', reportFilters?.vendor || filters?.vendor)}`);
+  lines.push(`- ${joinLine('Current Date', reportFilters?.currentDate)}`);
+  lines.push('');
+
+  lines.push('Aging Summary:');
+  lines.push(`- ${joinLine('Current (0-30 Days)', pickFirst(agingSummary?.current || {}, ['amount']))}`);
+  lines.push(`- ${joinLine('31-60 Days', pickFirst(agingSummary?.aging30 || {}, ['amount']))}`);
+  lines.push(`- ${joinLine('61-90 Days', pickFirst(agingSummary?.aging60 || {}, ['amount']))}`);
+  lines.push(`- ${joinLine('Over 90 Days', pickFirst(agingSummary?.aging90 || {}, ['amount']))}`);
+  lines.push(joinLine('Total Outstanding', agingSummary?.totalOutstanding));
+  lines.push(joinLine('Total Count', agingSummary?.totalCount));
+  lines.push('');
+
+  if (!invoices.length) {
+    lines.push('No invoices found for the selected vendor and date context.');
+    return lines.join('\n');
+  }
+
+  lines.push('Invoice Details:');
+  invoices.forEach((it, idx) => {
+    lines.push(`${idx + 1}.`);
+    lines.push(joinLine('Invoice Number', pickFirst(it, ['invoiceNumber'])));
+    lines.push(joinLine('Invoice Date', pickFirst(it, ['invoiceDate'])));
+    lines.push(joinLine('Due Date', pickFirst(it, ['dueDate'])));
+    lines.push(joinLine('Amount', pickFirst(it, ['amount'])));
+    lines.push(joinLine('Currency', pickFirst(it, ['currency'])));
+    lines.push(joinLine('Age Days', pickFirst(it, ['ageDays'])));
+    lines.push(joinLine('Age Bucket', pickFirst(it, ['ageBucket'])));
+    appendAdditionalFields(lines, it, new Set([
+      'invoiceNumber',
+      'invoiceDate',
+      'dueDate',
+      'amount',
+      'currency',
+      'ageDays',
+      'ageBucket'
+    ]));
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
+function formatThreeWayPendingReportPayload(resp, filters = {}) {
+  const reportType = normalizeUpperValue(filters?.reportType || resp?.raw?.reportType);
+  if (reportType !== '3WAY_PENDING') return null;
+
+  const raw = resp?.raw && typeof resp.raw === 'object' ? resp.raw : {};
+  const reportFilters = raw?.filters && typeof raw.filters === 'object' ? raw.filters : {};
+  const summary = raw?.summary && typeof raw.summary === 'object' ? raw.summary : {};
+  const pendingItems = Array.isArray(raw?.pendingItems)
+    ? raw.pendingItems
+    : Array.isArray(raw?.poItems)
+      ? raw.poItems
+      : [];
+
+  const lines = [];
+  lines.push('LIV Approval Pending (3-Way Match) Report:');
+  lines.push(joinLine('Success', raw?.success));
+  lines.push(joinLine('Message', raw?.message));
+  lines.push(joinLine('Report Type', raw?.reportType || reportType));
+  lines.push(joinLine('Description', raw?.description));
+  lines.push('');
+
+  lines.push('Filters:');
+  lines.push(`- ${joinLine('Purchasing Org', reportFilters?.purchasingOrg || filters?.purchasingOrg)}`);
+  lines.push(`- ${joinLine('Date From', reportFilters?.dateFrom || filters?.dateFrom)}`);
+  lines.push(`- ${joinLine('Date To', reportFilters?.dateTo || filters?.dateTo)}`);
+  lines.push('');
+
+  lines.push('Summary:');
+  lines.push(joinLine('Total Pending', summary?.totalPending));
+  lines.push(joinLine('Waiting Invoice', summary?.waitingInvoice));
+  lines.push(joinLine('Variance Detected', summary?.varianceDetected));
+  lines.push('');
+
+  if (!pendingItems.length) {
+    lines.push('No pending 3-way match items were returned for the selected filters.');
+    return lines.join('\n');
+  }
+
+  lines.push('Pending PO Items:');
+  pendingItems.forEach((it, idx) => {
+    lines.push(`${idx + 1}.`);
+    lines.push(joinLine('PO Number', pickFirst(it, ['poNumber'])));
+    lines.push(joinLine('PO Item', pickFirst(it, ['poItem'])));
+    lines.push(joinLine('PO Date', pickFirst(it, ['poDate'])));
+    lines.push(joinLine('Vendor Code', pickFirst(it, ['vendorCode'])));
+    lines.push(joinLine('Vendor Name', pickFirst(it, ['vendorName'])));
+    lines.push(joinLine('Description', pickFirst(it, ['description'])));
+    lines.push(joinLine('PO Value', pickFirst(it, ['poValue'])));
+    lines.push(joinLine('Currency', pickFirst(it, ['currency'])));
+    lines.push(joinLine('Match Status', pickFirst(it, ['matchStatus'])));
+    lines.push(joinLine('Pending Days', pickFirst(it, ['pendingDays'])));
+    lines.push(joinLine('Variance', pickFirst(it, ['variance'])));
+
+    const grStatus = it?.grStatus && typeof it.grStatus === 'object' ? it.grStatus : {};
+    lines.push('GR Status:');
+    lines.push(`- ${joinLine('Completed', grStatus?.completed)}`);
+    lines.push(`- ${joinLine('GR Number', grStatus?.grNumber)}`);
+    lines.push(`- ${joinLine('GR Date', grStatus?.grDate)}`);
+    lines.push(`- ${joinLine('GR Quantity', grStatus?.grQuantity)}`);
+    lines.push(`- ${joinLine('GR Value', grStatus?.grValue)}`);
+
+    const seStatus = it?.seStatus && typeof it.seStatus === 'object' ? it.seStatus : {};
+    lines.push('SE Status:');
+    lines.push(`- ${joinLine('Completed', seStatus?.completed)}`);
+    lines.push(`- ${joinLine('SE Number', seStatus?.seNumber)}`);
+    lines.push(`- ${joinLine('SE Date', seStatus?.seDate)}`);
+    lines.push(`- ${joinLine('SE Value', seStatus?.seValue)}`);
+    lines.push(`- ${joinLine('SE Accepted', seStatus?.seAccepted)}`);
+
+    const invoiceStatus = it?.invoiceStatus && typeof it.invoiceStatus === 'object' ? it.invoiceStatus : {};
+    lines.push('Invoice Status:');
+    lines.push(`- ${joinLine('Received', invoiceStatus?.received)}`);
+    lines.push(`- ${joinLine('Invoice Number', invoiceStatus?.invoiceNumber)}`);
+    lines.push(`- ${joinLine('Invoice Date', invoiceStatus?.invoiceDate)}`);
+    lines.push(`- ${joinLine('Invoice Value', invoiceStatus?.invoiceValue)}`);
+    appendAdditionalFields(lines, it, new Set([
+      'poNumber', 'poItem', 'poDate', 'vendorCode', 'vendorName', 'description', 'poValue', 'currency',
+      'matchStatus', 'pendingDays', 'variance', 'grStatus', 'seStatus', 'invoiceStatus'
+    ]));
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
 function normalizeDocNumbers(rawNumbers) {
   if (!rawNumbers) return [];
   const normalizeToken = (value) =>
@@ -1429,6 +1580,16 @@ function formatSearchResultsNice(
   const topVendorResponse = formatTopVendorReportPayload(resp, filters);
   if (topVendorResponse) {
     return topVendorResponse;
+  }
+
+  const invoiceAgingResponse = formatInvoiceAgingReportPayload(resp, filters);
+  if (invoiceAgingResponse) {
+    return invoiceAgingResponse;
+  }
+
+  const threeWayPendingResponse = formatThreeWayPendingReportPayload(resp, filters);
+  if (threeWayPendingResponse) {
+    return threeWayPendingResponse;
   }
 
   if (countRequested && !hasLineItems && resp?.totalCount !== null && resp?.totalCount !== undefined) {
