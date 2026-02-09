@@ -3,7 +3,6 @@ I would like know ST Engineering Invoice search policy?
 Ok. Cool. Can you give invoices which are posted in March 2024 for company code 801?
 Oh. Thats nice! Can I get invoice details for invoice 248013075?
 can I get invoice details for invoice 248013075X?
+Which are the top 10 POs by value in FY2025 under purchasing org 3022?
+Show me POs above SGD 300,000 created this quarter.
 Thanks for quick chat. See you again!
-
-
-

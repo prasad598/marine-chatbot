@@ -99,6 +99,10 @@ Examples for search filters:
   { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "top": 100, "skip": 100 }
 - "Count only (no data)" ->
   { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "count": true }
+- "Which are the top 10 POs by value in FY2025 under purchasing org 3022?" ->
+  { "reportType": "TOP_PO", "purchasingOrg": "3022", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "topN": 10 }
+- "Show me POs above SGD 300,000 created this quarter" ->
+  { "reportType": "TOP_PO", "purchasingOrg": "3022", "dateFrom": "01.01.2025", "dateTo": "31.03.2025", "minValue": 300000 }
 
 Query formation guidance:
 - Use DocType=PO/PR/INV when the user specifies purchase orders, requisitions, or invoices.
@@ -107,6 +111,7 @@ Query formation guidance:
 - Use POStatus/PRStatus for approval/release status, SEStatus for service entry status, SAStatus for service acceptance status.
 - Use MinValue for value thresholds and TopN for top-N reports.
 - Use ReportType for special reports (TOP_VENDOR, TOP_PO, SEARCH_DESC, PR_APPROVED, PR_PENDING, INVOICE_AGING, INVOICE_OVERDUE, PR_OVERDUE, 3WAY_PENDING, PO_OVERDUE).
+- For TOP_* report types (for example TOP_PO, TOP_VENDOR, TOP_PR, TOP_INV), never set count=true.
 - For overdue reports, use ReportType + OverdueDays and do not include PaymentStatus.
 - Use top/skip for pagination and count=true for count-only requests.
 
@@ -533,6 +538,12 @@ function isOverdueReportType(reportType) {
   return ['INVOICE_OVERDUE', 'PR_OVERDUE', 'PO_OVERDUE'].includes(normalized);
 }
 
+function isTopReportType(reportType) {
+  if (!reportType) return false;
+  const normalized = String(reportType).trim().toUpperCase();
+  return normalized.startsWith('TOP_');
+}
+
 function formatOverdueReportPayload(resp, filters = {}) {
   const reportType = normalizeUpperValue(filters?.reportType || resp?.raw?.reportType);
   if (!['INVOICE_OVERDUE', 'PR_OVERDUE', 'PO_OVERDUE'].includes(reportType)) {
@@ -903,7 +914,7 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
   const paymentStatus = isOverdueReportType(reportType)
     ? undefined
     : normalizePaymentStatus(filters?.paymentStatus, userQuery);
-  const countRequested = reportType === 'TOP_VENDOR' ? false : normalizeCountFlag(filters?.count);
+  const countRequested = isTopReportType(reportType) ? false : normalizeCountFlag(filters?.count);
 
   const normalizedFilters = {
     ...filters,
