@@ -99,6 +99,8 @@ Examples for search filters:
   { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "top": 100, "skip": 100 }
 - "Count only (no data)" ->
   { "docType": "PO", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "count": true }
+- "How many POs were issued and approved from 30/06/2025 to 31/12/2025" ->
+  { "docType": "PO", "dateFrom": "30.06.2025", "dateTo": "31.12.2025", "approveFromDate": "30.06.2025", "approveToDate": "31.12.2025", "count": true }
 - "Which are the top 10 POs by value in FY2025 under purchasing org 3022?" ->
   { "reportType": "TOP_PO", "purchasingOrg": "3022", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "topN": 10 }
 - "Who are the top 5 contractors by PO value in purchasing org 1000?" ->
@@ -119,6 +121,7 @@ Query formation guidance:
 - For TOP_* report types (for example TOP_PO, TOP_VENDOR, TOP_PR, TOP_INV), never set count=true.
 - For overdue reports, use ReportType + OverdueDays and do not include PaymentStatus.
 - Use top/skip for pagination and count=true for count-only requests.
+- If the user asks a combined count such as "issued and approved" for the same period, populate both issuance and approval ranges so the app can run two count calls (DateFrom/DateTo and ApproveFromDate/ApproveToDate) and return both counts separately.
 
 For all other questions (including queries answered from the embedding/policy documents), return:
 {
@@ -1473,6 +1476,61 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
   };
 }
 
+function toCompactDateString(value) {
+  if (value === undefined || value === null) return '';
+  const trimmed = String(value).trim();
+  if (!trimmed) return '';
+
+  if (/^\d{8}$/.test(trimmed)) return trimmed;
+
+  const dotted = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dotted) {
+    const [, dd, mm, yyyy] = dotted;
+    return `${yyyy}${mm}${dd}`;
+  }
+
+  const slashed = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (slashed) {
+    const [, dd, mm, yyyy] = slashed;
+    return `${yyyy}${mm}${dd}`;
+  }
+
+  return trimmed;
+}
+
+function shouldSplitIssuedApprovedCountQuery(userQuery, filters = {}, countRequested = false) {
+  if (!countRequested) return false;
+
+  const query = String(userQuery || '').toLowerCase();
+  const hasIssuedIntent = /\b(issued|created|raised)\b/.test(query);
+  const hasApprovedIntent = /\b(approved|approval)\b/.test(query);
+  const hasIssueDateRange = Boolean(filters?.dateFrom && filters?.dateTo);
+  const hasApproveDateRange = Boolean(filters?.approveFromDate && filters?.approveToDate);
+  const hasDocType = Boolean(normalizeDocType(filters?.docType));
+
+  return hasDocType && hasIssuedIntent && hasApprovedIntent && (hasIssueDateRange || hasApproveDateRange);
+}
+
+function formatIssuedApprovedCountResponse({ docType, issueCount, approvalCount, dateFrom, dateTo, approveFromDate, approveToDate }) {
+  const labels = {
+    PO: 'purchase orders',
+    PR: 'purchase requisitions',
+    INV: 'invoices'
+  };
+  const docLabel = labels[docType] || 'documents';
+  const lines = [];
+
+  lines.push(`I found two separate counts for ${docLabel}:`);
+  lines.push('');
+  lines.push(`1. Issued count (${dateFrom || 'N/A'} to ${dateTo || 'N/A'}): ${Number.isFinite(issueCount) ? issueCount : 'N/A'}`);
+  lines.push('   - This count is based on issuance/creation date filters using DateFrom and DateTo.');
+  lines.push('');
+  lines.push(`2. Approved count (${approveFromDate || 'N/A'} to ${approveToDate || 'N/A'}): ${Number.isFinite(approvalCount) ? approvalCount : 'N/A'}`);
+  lines.push('   - This count is based on approval date filters using ApproveFromDate and ApproveToDate.');
+
+  return lines.join('\n');
+}
+
 function shouldSkipCountForSmallTop({ requestedTop, requestedTopN } = {}) {
   const top = normalizeNumber(requestedTop);
   const topN = normalizeNumber(requestedTopN);
@@ -2194,6 +2252,58 @@ const categoryHandlers = {
         deterministic: {
           role: 'assistant',
           content: 'Please provide the Purchasing Organization to fetch the top vendors/contractors by PO value.',
+          additionalContents: []
+        }
+      };
+    }
+
+    if (shouldSplitIssuedApprovedCountQuery(user_query, filters, countRequested)) {
+      const issueFrom = filters?.dateFrom || filters?.approveFromDate;
+      const issueTo = filters?.dateTo || filters?.approveToDate;
+      const approvalFrom = toCompactDateString(filters?.approveFromDate || filters?.dateFrom);
+      const approvalTo = toCompactDateString(filters?.approveToDate || filters?.dateTo);
+
+      const [issuedCountResponse, approvedCountResponse] = await Promise.all([
+        marine_util.searchDocuments({
+          docType,
+          dateFrom: issueFrom,
+          dateTo: issueTo,
+          count: true
+        }),
+        marine_util.searchDocuments({
+          docType,
+          approveFromDate: approvalFrom,
+          approveToDate: approvalTo,
+          count: true
+        })
+      ]);
+
+      const issueCount = Number.isFinite(issuedCountResponse?.totalCount) ? issuedCountResponse.totalCount : null;
+      const approvalCount = Number.isFinite(approvedCountResponse?.totalCount) ? approvedCountResponse.totalCount : null;
+
+      if (issueCount === null && approvalCount === null) {
+        return {
+          deterministic: {
+            role: 'assistant',
+            content: 'I could not find counts for the issued and approved criteria in the selected period.',
+            additionalContents: []
+          }
+        };
+      }
+
+      return {
+        deterministic: {
+          role: 'assistant',
+          content: formatIssuedApprovedCountResponse({
+            docType,
+            issueCount,
+            approvalCount,
+            dateFrom: issueFrom,
+            dateTo: issueTo,
+            approveFromDate: approvalFrom,
+            approveToDate: approvalTo
+          }),
+          includeClosingLine: true,
           additionalContents: []
         }
       };
