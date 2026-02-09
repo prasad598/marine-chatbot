@@ -875,40 +875,60 @@ function formatTopPoReportPayload(resp, filters = {}) {
     normalizeNumber(reportFilters?.top) ||
     topPoItems.length;
 
+  const formatDate = (value) => {
+    const text = value == null ? '' : String(value).trim();
+    if (!/^\d{8}$/.test(text)) return text || 'N/A';
+    return `${text.slice(6, 8)}.${text.slice(4, 6)}.${text.slice(0, 4)}`;
+  };
+
+  const formatAmount = (value, currency) => {
+    if (value === undefined || value === null || value === '') return 'N/A';
+    const parsed = Number(value);
+    const normalizedCurrency = currency ? String(currency).trim().toUpperCase() : '';
+
+    if (!Number.isFinite(parsed)) {
+      return normalizedCurrency ? `${value} ${normalizedCurrency}` : String(value);
+    }
+
+    const formatted = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(parsed);
+
+    return normalizedCurrency ? `${formatted} ${normalizedCurrency}` : formatted;
+  };
+
   const lines = [];
-  lines.push(`Displaying top ${requestedTopN || topPoItems.length || 0} purchase orders by value.`);
+  const totalPOs = normalizeNumber(raw?.totalPOs);
+  lines.push(`Top ${requestedTopN || topPoItems.length || 0} Purchase Orders by Value`);
   lines.push('');
-  lines.push(joinLine('Success', raw?.success));
-  lines.push(joinLine('Message', raw?.message));
-  lines.push(joinLine('Report Type', raw?.reportType || reportType));
-  lines.push('Filters:');
-  lines.push(`- ${joinLine('Purchasing Org', reportFilters?.purchasingOrg || filters?.purchasingOrg)}`);
-  lines.push(`- ${joinLine('Date From', reportFilters?.dateFrom || filters?.dateFrom)}`);
-  lines.push(`- ${joinLine('Date To', reportFilters?.dateTo || filters?.dateTo)}`);
-  lines.push(`- ${joinLine('Minimum Value', reportFilters?.minValue || filters?.minValue)}`);
-  lines.push(`- ${joinLine('Top N', reportFilters?.topN || filters?.topN || requestedTopN)}`);
-  lines.push(`- ${joinLine('Skip', reportFilters?.skip)}`);
-  lines.push(`- ${joinLine('Top', reportFilters?.top)}`);
-  lines.push(joinLine('Total POs', raw?.totalPOs));
+
+  lines.push('Selection Criteria:');
+  lines.push(`- ${joinLine('Purchasing Organization', reportFilters?.purchasingOrg || filters?.purchasingOrg || 'All')}`);
+  lines.push(`- ${joinLine('Period From', formatDate(reportFilters?.dateFrom || filters?.dateFrom))}`);
+  lines.push(`- ${joinLine('Period To', formatDate(reportFilters?.dateTo || filters?.dateTo))}`);
+  lines.push(`- ${joinLine('Minimum PO Value', formatAmount(reportFilters?.minValue || filters?.minValue, ''))}`);
+  lines.push(`- ${joinLine('Requested Top N', reportFilters?.topN || filters?.topN || requestedTopN || topPoItems.length)}`);
+  if (reportFilters?.skip !== undefined) lines.push(`- ${joinLine('Skip', reportFilters?.skip)}`);
+  if (reportFilters?.top !== undefined) lines.push(`- ${joinLine('Page Size (Top)', reportFilters?.top)}`);
+  if (Number.isFinite(totalPOs)) lines.push(`- ${joinLine('Total POs Found', totalPOs)}`);
   lines.push('');
 
   if (!topPoItems.length) {
-    lines.push('No purchase order records were returned for the selected filters.');
+    lines.push('No purchase orders were returned for the selected criteria.');
     return lines.join('\n');
   }
 
-  lines.push('Top Purchase Order Results:');
+  lines.push('Purchase Order Ranking:');
   topPoItems.forEach((it, idx) => {
-    lines.push(`${idx + 1}.`);
-    lines.push(joinLine('Rank', pickFirst(it, ['rank'])));
-    lines.push(joinLine('PO Number', pickFirst(it, ['poNumber'])));
-    lines.push(joinLine('PO Date', pickFirst(it, ['poDate'])));
-    lines.push(joinLine('Vendor Code', pickFirst(it, ['vendorCode'])));
-    lines.push(joinLine('Vendor Name', pickFirst(it, ['vendorName'])));
-    lines.push(joinLine('Total Value', pickFirst(it, ['totalValue'])));
-    lines.push(joinLine('Currency', pickFirst(it, ['currency'])));
-    lines.push(joinLine('Item Count', pickFirst(it, ['itemCount'])));
-    lines.push(joinLine('Description', pickFirst(it, ['description'])));
+    const rank = pickFirst(it, ['rank'], idx + 1);
+    const currency = pickFirst(it, ['currency']);
+    lines.push(`${idx + 1}. Rank #${rank} - PO ${pickFirst(it, ['poNumber']) || 'N/A'}`);
+    lines.push(`   • ${joinLine('PO Date', formatDate(pickFirst(it, ['poDate'])))}`);
+    lines.push(`   • ${joinLine('Vendor', `${pickFirst(it, ['vendorName']) || 'N/A'} (${pickFirst(it, ['vendorCode']) || 'N/A'})`)}`);
+    lines.push(`   • ${joinLine('Total Value', formatAmount(pickFirst(it, ['totalValue']), currency))}`);
+    lines.push(`   • ${joinLine('Item Count', pickFirst(it, ['itemCount']))}`);
+    lines.push(`   • ${joinLine('Description', pickFirst(it, ['description']))}`);
     lines.push('');
   });
 
@@ -1813,6 +1833,39 @@ function formatSearchResultsNice(
   return lines.join('\n');
 }
 
+function hasReportSpecificData(resp = {}) {
+  const raw = resp?.raw && typeof resp.raw === 'object' ? resp.raw : {};
+  const reportType = normalizeUpperValue(raw?.reportType);
+
+  if (!reportType) return false;
+
+  if (reportType === 'TOP_PO') {
+    return (
+      (Array.isArray(raw?.topPOs) && raw.topPOs.length > 0) ||
+      (Array.isArray(raw?.purchaseOrders) && raw.purchaseOrders.length > 0) ||
+      (Array.isArray(raw?.poItems) && raw.poItems.length > 0)
+    );
+  }
+
+  if (reportType === 'TOP_VENDOR') {
+    return (
+      (Array.isArray(raw?.topVendors) && raw.topVendors.length > 0) ||
+      (Array.isArray(raw?.data) && raw.data.length > 0) ||
+      (Array.isArray(raw?.vendors) && raw.vendors.length > 0)
+    );
+  }
+
+  if (reportType === 'INVOICE_AGING') {
+    return Array.isArray(raw?.invoices) && raw.invoices.length > 0;
+  }
+
+  if (reportType === '3WAY_PENDING') {
+    return Array.isArray(raw?.pendingItems) && raw.pendingItems.length > 0;
+  }
+
+  return false;
+}
+
 // ---------------- CATEGORY HANDLERS ----------------
 const categoryHandlers = {
   'status-clarification': async ({ determinationJson }) => {
@@ -2051,6 +2104,7 @@ const categoryHandlers = {
       ((Array.isArray(serviceResponse.poItems) && serviceResponse.poItems.length > 0) ||
         (Array.isArray(serviceResponse.prItems) && serviceResponse.prItems.length > 0) ||
         (Array.isArray(serviceResponse.invoiceItems) && serviceResponse.invoiceItems.length > 0) ||
+        hasReportSpecificData(serviceResponse) ||
         (countRequested && serviceResponse?.totalCount !== null));
 
     if (!hasData) {
