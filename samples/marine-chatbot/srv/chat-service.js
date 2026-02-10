@@ -1498,6 +1498,18 @@ function toCompactDateString(value) {
   return trimmed;
 }
 
+function toDisplayDateString(value) {
+  if (value === undefined || value === null) return 'N/A';
+  const trimmed = String(value).trim();
+  if (!trimmed) return 'N/A';
+
+  if (/^\d{8}$/.test(trimmed)) {
+    return `${trimmed.slice(6, 8)}.${trimmed.slice(4, 6)}.${trimmed.slice(0, 4)}`;
+  }
+
+  return trimmed;
+}
+
 function shouldSplitIssuedApprovedCountQuery(userQuery, filters = {}, countRequested = false) {
   if (!countRequested) return false;
 
@@ -1519,13 +1531,20 @@ function formatIssuedApprovedCountResponse({ docType, issueCount, approvalCount,
   };
   const docLabel = labels[docType] || 'documents';
   const lines = [];
+  const issuedRangeFrom = toDisplayDateString(dateFrom);
+  const issuedRangeTo = toDisplayDateString(dateTo);
+  const approvedRangeFrom = toDisplayDateString(approveFromDate);
+  const approvedRangeTo = toDisplayDateString(approveToDate);
+  const approvedCountText = Number.isFinite(approvalCount)
+    ? approvalCount
+    : `No ${docLabel} were approved in the given time range.`;
 
   lines.push(`I found two separate counts for ${docLabel}:`);
   lines.push('');
-  lines.push(`1. Issued count (${dateFrom || 'N/A'} to ${dateTo || 'N/A'}): ${Number.isFinite(issueCount) ? issueCount : 'N/A'}`);
+  lines.push(`1. Issued count (${issuedRangeFrom} to ${issuedRangeTo}): ${Number.isFinite(issueCount) ? issueCount : 'N/A'}`);
   lines.push('   - This count is based on issuance/creation date filters using DateFrom and DateTo.');
   lines.push('');
-  lines.push(`2. Approved count (${approveFromDate || 'N/A'} to ${approveToDate || 'N/A'}): ${Number.isFinite(approvalCount) ? approvalCount : 'N/A'}`);
+  lines.push(`2. Approved count (${approvedRangeFrom} to ${approvedRangeTo}): ${approvedCountText}`);
   lines.push('   - This count is based on approval date filters using ApproveFromDate and ApproveToDate.');
 
   return lines.join('\n');
