@@ -105,6 +105,8 @@ Examples for search filters:
   { "reportType": "TOP_PO", "purchasingOrg": "3022", "dateFrom": "01.01.2025", "dateTo": "31.12.2025", "topN": 10 }
 - "Who are the top 5 contractors by PO value in purchasing org 1000?" ->
   { "reportType": "TOP_VENDOR", "purchasingOrg": "1000", "topN": 5 }
+- "Who are the top 5 contractors by PO value?" ->
+  { "reportType": "TOP_VENDOR", "topN": 5 }
 - "List PRs pending for approval" ->
   { "reportType": "PR_PENDING", "docType": "PR_PENDING" }
 - "Show me POs above SGD 300,000 created this quarter" ->
@@ -118,6 +120,7 @@ Query formation guidance:
 - Use MinValue for value thresholds and TopN for top-N reports.
 - Do not use TOP_PO/TOP_VENDOR when the user only asks for documents above a value threshold; use DocType + MinValue (+ date range) instead.
 - Use ReportType for special reports (TOP_VENDOR, TOP_PO, SEARCH_DESC, PR_APPROVED, PR_PENDING, INVOICE_AGING, INVOICE_OVERDUE, PR_OVERDUE, 3WAY_PENDING, PO_OVERDUE).
+- PurchasingOrg is optional for TOP_VENDOR and TOP_PO reports; include it only when explicitly provided.
 - For TOP_* report types (for example TOP_PO, TOP_VENDOR, TOP_PR, TOP_INV), never set count=true.
 - For overdue reports, use ReportType + OverdueDays and do not include PaymentStatus.
 - Use top/skip for pagination and count=true for count-only requests.
@@ -2262,20 +2265,6 @@ const categoryHandlers = {
       };
     }
 
-    if (normalizeUpperValue(filters?.reportType) === 'TOP_VENDOR' && !filters?.purchasingOrg) {
-      updateCachedSearchFilters(conversationId, {
-        ...filters,
-        reportType: 'TOP_VENDOR'
-      });
-      return {
-        deterministic: {
-          role: 'assistant',
-          content: 'Please provide the Purchasing Organization to fetch the top vendors/contractors by PO value.',
-          additionalContents: []
-        }
-      };
-    }
-
     if (shouldSplitIssuedApprovedCountQuery(user_query, filters, countRequested)) {
       const issueFrom = filters?.dateFrom || filters?.approveFromDate;
       const issueTo = filters?.dateTo || filters?.approveToDate;
@@ -2669,7 +2658,7 @@ module.exports = function () {
       const hasIncomingFilters = hasSearchFilters(mergedIncomingFilters);
       const cachedSearch = getCachedSearchFilters(conversationId);
       const isPurchasingOrgReply = /^\s*\d{3,6}\s*$/.test(`${user_query || ''}`);
-      const pendingOrgReportTypes = ['3WAY_PENDING', 'TOP_VENDOR'];
+      const pendingOrgReportTypes = ['3WAY_PENDING'];
       const pendingReportWithoutOrg =
         pendingOrgReportTypes.includes(normalizeUpperValue(cachedSearch.filters?.reportType)) &&
         !cachedSearch.filters?.purchasingOrg;
