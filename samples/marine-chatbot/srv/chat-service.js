@@ -1853,6 +1853,14 @@ function prependQuestionContext(userQuery, content) {
     return normalizedContent;
   }
 
+  if (
+    normalizedContent
+      .toLowerCase()
+      .startsWith('no results found for the provided search criteria. please check and provide valid data')
+  ) {
+    return normalizedContent;
+  }
+
   return `Here are the results for your question: "${normalizedQuestion}"\n${normalizedContent}`;
 }
 
