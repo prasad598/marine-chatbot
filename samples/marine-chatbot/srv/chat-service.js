@@ -240,6 +240,30 @@ function appendAdditionalFields(lines, source = {}, usedKeys = new Set(), { skip
   });
 }
 
+function formatPoSearchItemDetails(lines, it, idx) {
+  const poNo = pickFirst(it, ['PO Number', 'ebeln', 'poNumber']);
+  const poItem = pickFirst(it, ['PO Item', 'ebelp', 'poItem']);
+  const status = pickFirst(it, ['PO Status', 'poStatus']);
+  const poDate = toDisplayDateString(pickFirst(it, ['PO Date', 'bedat', 'poDate'], ''));
+  const vendorName = pickFirst(it, ['Vendor Name', 'name1', 'vendorName'], '');
+  const materialDesc = pickFirst(it, ['Material Desc', 'txz01', 'materialDescription'], '');
+  const quantity = pickFirst(it, ['Quantity', 'menge', 'quantity'], '');
+  const uom = pickFirst(it, ['UOM', 'meins', 'uom'], '');
+  const netValue = pickFirst(it, ['Net Value', 'netValue'], '');
+  const currency = pickFirst(it, ['Currency', 'waers', 'currency'], '');
+
+  lines.push(`#${idx + 1}`);
+  lines.push(joinLine('PO Number', poNo));
+  lines.push(joinLine('Item', poItem));
+  lines.push(joinLine('Status', status));
+  lines.push(joinLine('PO Date', poDate));
+  if (vendorName) lines.push(joinLine('Vendor', vendorName));
+  if (materialDesc) lines.push(joinLine('Description', materialDesc));
+  if (quantity || uom) lines.push(joinLine('Quantity', `${quantity || 'N/A'} ${uom || ''}`.trim()));
+  if (netValue || currency) lines.push(joinLine('Net Value', `${currency || ''} ${netValue || ''}`.trim()));
+  lines.push('');
+}
+
 function formatPoItemDetails(lines, it, idx, fallbackPo) {
   const poNo = pickFirst(it, ['PO Number', 'ebeln', 'poNumber'], fallbackPo);
   const poItem = pickFirst(it, ['PO Item', 'ebelp', 'poItem']);
@@ -663,6 +687,34 @@ function deriveRelativeIssueDateRange(userQuery) {
   }
 
   return null;
+}
+
+function deriveNamedMonthDateRange(userQuery) {
+  if (!userQuery) return null;
+
+  const query = `${userQuery}`.toLowerCase();
+  const months = {
+    january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+    july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+  };
+
+  const namedMonthPattern = /\b(?:this\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?\b/i;
+  const match = query.match(namedMonthPattern);
+  if (!match) return null;
+
+  const monthKey = String(match[1] || '').toLowerCase();
+  const monthIndex = months[monthKey];
+  if (!Number.isInteger(monthIndex)) return null;
+
+  const explicitYear = Number(match[2]);
+  const year = Number.isFinite(explicitYear) && explicitYear >= 1900 ? explicitYear : new Date().getFullYear();
+
+  const fromDate = new Date(year, monthIndex, 1);
+  const toDate = new Date(year, monthIndex + 1, 0);
+  return {
+    dateFrom: formatDateAsDotted(fromDate),
+    dateTo: formatDateAsDotted(toDate)
+  };
 }
 
 function normalizeUpperValue(value) {
@@ -1465,7 +1517,7 @@ function normalizeSearchFilters(filters = {}, { userId, userQuery } = {}) {
     count: countRequested
   };
 
-  const relativeIssueDateRange = deriveRelativeIssueDateRange(userQuery);
+  const relativeIssueDateRange = deriveRelativeIssueDateRange(userQuery) || deriveNamedMonthDateRange(userQuery);
   if (relativeIssueDateRange) {
     normalizedFilters.dateFrom = relativeIssueDateRange.dateFrom;
     normalizedFilters.dateTo = relativeIssueDateRange.dateTo;
@@ -1980,7 +2032,7 @@ function formatSearchResultsNice(
     lines.push('');
   }
 
-  const rawReportType = pickFirst(resp?.raw || {}, ['reportType'], '').toUpperCase();
+  const rawReportType = normalizeUpperValue(pickFirst(resp?.raw || {}, ['reportType'], '')) || '';
   const rawFilters = resp?.raw?.filters && typeof resp.raw.filters === 'object' ? resp.raw.filters : null;
   const rawTotalMatches = pickFirst(resp?.raw || {}, ['totalMatches'], '');
   if (rawReportType) {
@@ -2034,7 +2086,7 @@ function formatSearchResultsNice(
   if (poItems.length) {
     lines.push('Purchase Order Items:');
     poItems.forEach((it, idx) => {
-      formatPoItemDetails(lines, it, idx);
+      formatPoSearchItemDetails(lines, it, idx);
     });
   }
 
@@ -2057,6 +2109,48 @@ function formatSearchResultsNice(
       lines.push('No line items returned for the count-only request.');
     } else {
       lines.push('No matching documents were returned for the selected filters.');
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function formatSearchResultsSafely(resp, options = {}) {
+  try {
+    const formatted = formatSearchResultsNice(resp, options);
+    if (typeof formatted === 'string' && formatted.trim()) {
+      return formatted;
+    }
+  } catch (error) {
+    console.error('[MARINE] Failed to format search response.', {
+      message: error?.message,
+      stack: error?.stack
+    });
+  }
+
+  const poItems = Array.isArray(resp?.poItems) ? resp.poItems : [];
+  const prItems = Array.isArray(resp?.prItems) ? resp.prItems : [];
+  const invoiceItems = Array.isArray(resp?.invoiceItems) ? resp.invoiceItems : [];
+  const totalFromResponse = Number.isFinite(resp?.totalCount)
+    ? resp.totalCount
+    : poItems.length + prItems.length + invoiceItems.length;
+
+  const lines = [
+    'I found matching documents, but I could not render the full response format.',
+    joinLine('Total Count', totalFromResponse),
+    joinLine('Purchase Order Items', poItems.length),
+    joinLine('Purchase Requisition Items', prItems.length),
+    joinLine('Invoice Items', invoiceItems.length)
+  ];
+
+  if (poItems.length) {
+    lines.push('');
+    lines.push('Purchase Order Items:');
+    poItems.slice(0, 5).forEach((it, idx) => {
+      formatPoItemDetails(lines, it, idx);
+    });
+    if (poItems.length > 5) {
+      lines.push(`...and ${poItems.length - 5} more purchase order item(s).`);
     }
   }
 
@@ -2421,7 +2515,7 @@ const categoryHandlers = {
       };
     }
 
-    const content = formatSearchResultsNice(serviceResponse, {
+    const content = formatSearchResultsSafely(serviceResponse, {
       countRequested,
       docType,
       paymentStatus,
